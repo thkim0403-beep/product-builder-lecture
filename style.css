@@ -1,23 +1,81 @@
+:root {
+    --bg-color: #f0f0f0;
+    --text-color: #333;
+    --btn-bg: #007bff;
+    --btn-text: #fff;
+}
+
+body.dark-mode {
+    --bg-color: #121212;
+    --text-color: #f0f0f0;
+    --btn-bg: #bb86fc;
+    --btn-text: #000;
+}
+
 body {
     font-family: sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background-color: #f0f0f0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
+    margin: 0;
 }
 
 .container {
     text-align: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+#theme-toggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: 1px solid var(--text-color);
+    color: var(--text-color);
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 5px;
 }
 
 #generate-btn {
     padding: 10px 20px;
     font-size: 16px;
     cursor: pointer;
+    background-color: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+#generate-btn:hover {
+    opacity: 0.9;
 }
 
 #numbers-display {
     margin-top: 20px;
     font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.number {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    background-color: var(--text-color);
+    color: var(--bg-color);
+    border-radius: 50%;
+    font-size: 18px;
 }
