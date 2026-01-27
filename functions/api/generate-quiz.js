@@ -8,75 +8,67 @@ export async function onRequestPost(context) {
             return new Response(JSON.stringify({ error: "AI Binding Missing" }), { status: 500 });
         }
 
-        // Llama 3 8B Instruct 모델 사용
         const model = '@cf/meta/llama-3-8b-instruct';
         
-        const systemPrompt = `You are a strict JSON generator. You must output ONLY a valid JSON array of objects. 
-        Do not include markdown code blocks (like 
-```json
-). Do not add any conversational text.
-        Ensure all strings are properly escaped.`;
+        // JSON 대신 단순 텍스트 형식으로 요청 (파이프라인 | 구분자 사용)
+        const systemPrompt = `You are a quiz generator. Output ONLY the questions in a specific format.
+        Format per line: QUESTION|CORRECT_ANSWER|WRONG1|WRONG2|WRONG3
+        Do not add any numbers, bullets, or extra text. Generate exactly 10 lines.`;
 
-        const userPrompt = `Create 10 multiple-choice quiz questions about "${topic}" in Korean.
-        
-        Follow this EXACT JSON format:
-        [
-          {
-            "question": "What is 1+1?",
-            "answers": ["1", "2", "3", "4"],
-            "correct": "2"
-          }
-        ]
-        
-        Generate exactly 10 questions.`;
+        const userPrompt = `Generate 10 quiz questions about "${topic}" in Korean.
+        Example output:
+        1+1은?|2|1|3|4
+        한국의 수도는?|서울|부산|대구|인천`;
 
         const aiResponse = await env.AI.run(model, {
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt }
             ],
-            // max_tokens를 늘려서 응답이 잘리지 않게 함
-            max_tokens: 2000, 
-            temperature: 0.5 // 창의성을 낮춰서 형식을 더 잘 지키게 함
+            temperature: 0.7 // 약간의 창의성 허용
         });
 
-        let jsonText = '';
+        let textData = '';
         if (aiResponse && aiResponse.response) {
-            jsonText = aiResponse.response;
-        } else if (typeof aiResponse === 'string') {
-            jsonText = aiResponse;
+            textData = aiResponse.response;
         } else {
-            jsonText = JSON.stringify(aiResponse);
+            textData = JSON.stringify(aiResponse);
         }
 
-        // 1. 마크다운 코드 블록 제거
-        jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '');
-        
-        // 2. 앞뒤 공백 및 불필요한 텍스트 제거 (대괄호 찾기)
-        const firstBracket = jsonText.indexOf('[');
-        const lastBracket = jsonText.lastIndexOf(']');
-        
-        if (firstBracket !== -1 && lastBracket !== -1) {
-            jsonText = jsonText.substring(firstBracket, lastBracket + 1);
-        } else {
-            throw new Error("No JSON array found in AI response");
+        // 텍스트를 줄 단위로 분리하여 퀴즈 객체로 변환
+        const lines = textData.split('\n').filter(line => line.includes('|'));
+        const quizData = [];
+
+        for (const line of lines) {
+            const parts = line.split('|').map(p => p.trim());
+            if (parts.length >= 5) {
+                const question = parts[0];
+                const correct = parts[1];
+                const wrongs = parts.slice(2, 5);
+                
+                // 정답과 오답을 섞어서 answers 배열 생성
+                const answers = [correct, ...wrongs].sort(() => Math.random() - 0.5);
+
+                quizData.push({
+                    question: question,
+                    answers: answers,
+                    correct: correct
+                });
+            }
         }
 
-        try {
-            const quizData = JSON.parse(jsonText);
-            return new Response(JSON.stringify(quizData), {
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } catch (jsonError) {
-            // 파싱 실패 시, 원본 텍스트를 로그에 남겨서 디버깅
-            console.error("JSON Parse Error. Raw text:", jsonText);
-            throw new Error(`Invalid JSON format: ${jsonError.message}`);
+        if (quizData.length === 0) {
+            throw new Error("Failed to parse any quiz questions from AI text.");
         }
+
+        return new Response(JSON.stringify(quizData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
 
     } catch (e) {
         return new Response(JSON.stringify({
-            error: e.message,
-            stack: e.stack
+            error: "Quiz Generation Failed", 
+            message: e.message 
         }), { 
             status: 500,
             headers: { 'Content-Type': 'application/json' }
