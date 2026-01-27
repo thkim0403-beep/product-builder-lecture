@@ -1,13 +1,12 @@
-// TODO: Firebase Console에서 복사한 Firebase 설정 코드를 여기에 붙여넣으세요.
+// Firebase Configuration for AI Quiz Battle
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  apiKey: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY",
+  authDomain: "ai-quiz-f8680.firebaseapp.com",
+  projectId: "ai-quiz-f8680",
+  // Realtime Database URL is essential for Battle Mode
+  databaseURL: "https://ai-quiz-f8680-default-rtdb.firebaseio.com", 
+  storageBucket: "ai-quiz-f8680.firebasestorage.app",
+  messagingSenderId: "305663762906",
+  appId: "1:305663762906:web:e0f9033fff4f4b1d4660e3",
+  measurementId: "G-H67GC8CZ28"
 };
-
-// Firebase 초기화
-// firebase.initializeApp(firebaseConfig);
