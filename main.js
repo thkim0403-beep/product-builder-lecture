@@ -8,6 +8,11 @@ const battleModeBtn = document.getElementById('battle-mode-btn');
 const soloModeBtn = document.getElementById('solo-mode-btn');
 const backToMenuBtn = document.getElementById('back-to-menu');
 
+// New Navigation Buttons
+const backToMenuFromTopic = document.getElementById('back-to-menu-from-topic');
+const backToMenuFromBattle = document.getElementById('back-to-menu-from-battle');
+const quitBattleBtn = document.getElementById('quit-battle-btn');
+
 // Solo Game Elements
 const scoreEl = document.getElementById('score');
 const questionNumberEl = document.getElementById('question-number');
@@ -48,7 +53,6 @@ let db;
 let rtdb;
 let myPlayerId = 'player_' + Math.random().toString(36).substr(2, 9);
 let currentRoomId = null;
-let isBattleMode = false;
 
 const TOPICS = [
     { name: "한국사", icon: "🇰🇷" },
@@ -85,31 +89,50 @@ try {
     }
 } catch (e) { console.error(e); }
 
+
+// --- Navigation Functions ---
+function resetToMainMenu() {
+    modeSelection.classList.remove('hidden');
+    topicSelection.classList.add('hidden');
+    battleSetup.classList.add('hidden');
+    battleScreen.classList.add('hidden');
+    gameScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
+    
+    // Clean up battle if active
+    if (currentRoomId && rtdb) {
+        rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}`).remove();
+        rtdb.ref(`rooms/${currentRoomId}`).off();
+        currentRoomId = null;
+    }
+}
+
 // --- Event Listeners ---
 soloModeBtn.addEventListener('click', () => {
-    isBattleMode = false;
     modeSelection.classList.add('hidden');
     topicSelection.classList.remove('hidden');
 });
 
 battleModeBtn.addEventListener('click', () => {
-    isBattleMode = true;
     modeSelection.classList.add('hidden');
     battleSetup.classList.remove('hidden');
 });
 
+// Back Buttons
+if (backToMenuFromTopic) backToMenuFromTopic.addEventListener('click', resetToMainMenu);
+if (backToMenuFromBattle) backToMenuFromBattle.addEventListener('click', resetToMainMenu);
+if (quitBattleBtn) quitBattleBtn.addEventListener('click', resetToMainMenu);
+if (backToMenuBtn) backToMenuBtn.addEventListener('click', resetToMainMenu); // Quit Game button
+
 joinRoomBtn.addEventListener('click', () => {
     const roomId = roomIdInput.value.trim();
     if (roomId) joinBattleRoom(roomId);
-});
-
-backToMenuBtn.addEventListener('click', () => {
-    location.reload(); // Simple way to reset everything
+    else alert("Please enter a Room ID");
 });
 
 playAgainBtn.addEventListener('click', () => {
     endScreen.classList.add('hidden');
-    topicSelection.classList.remove('hidden');
+    topicSelection.classList.remove('hidden'); // Go back to topic selection
 });
 
 saveScoreBtn.addEventListener('click', async () => {
@@ -122,53 +145,78 @@ saveScoreBtn.addEventListener('click', async () => {
         await db.collection("scores").add({ name, score, date: new Date() });
         saveScoreSection.classList.add('hidden');
         fetchAndDisplayLeaderboard();
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error(e);
+        alert("Failed to save score");
+        saveScoreBtn.disabled = false;
+    }
 });
 
 shareImgBtn.addEventListener('click', async () => {
-    const element = document.getElementById('end-screen');
-    const canvas = await html2canvas(element, { backgroundColor: '#111827' });
-    const dataUrl = canvas.toDataURL('image/png');
-    
-    const link = document.createElement('a');
-    link.download = `quiz-result-${Date.now()}.png`;
-    link.href = dataUrl;
-    link.click();
-    
-    if (navigator.share) {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], 'result.png', { type: 'image/png' });
-        navigator.share({
-            files: [file],
-            title: 'AI QUIZ BATTLE RESULT',
-            text: `My score is ${score}! Can you beat me?`
-        }).catch(console.error);
+    try {
+        const element = document.getElementById('end-screen');
+        const canvas = await html2canvas(element, { backgroundColor: '#111827', scale: 2 });
+        const dataUrl = canvas.toDataURL('image/png');
+        
+        // Mobile Share API
+        if (navigator.share) {
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], 'quiz-result.png', { type: 'image/png' });
+            await navigator.share({
+                title: 'AI QUIZ BATTLE',
+                text: `I scored ${score} points! #AIQuizBattle`,
+                files: [file]
+            });
+        } else {
+            // Desktop Download
+            const link = document.createElement('a');
+            link.download = `quiz-result-${Date.now()}.png`;
+            link.href = dataUrl;
+            link.click();
+        }
+    } catch (e) {
+        console.error("Share failed", e);
+        alert("Image share failed. Please try a screenshot.");
     }
 });
 
 // --- Solo Game Logic ---
 async function fetchQuiz(topic) {
     const originalContent = topicSelection.innerHTML;
-    topicSelection.innerHTML = `<div class="py-20 animate-pulse text-xl">GENERATING ${topic} QUIZ...</div>`;
+    topicSelection.innerHTML = `
+        <div class="flex flex-col items-center justify-center space-y-8 py-20">
+            <div class="animate-spin rounded-full h-20 w-20 border-t-4 border-b-4 border-blue-500"></div>
+            <p class="text-xl animate-pulse text-blue-400" style="font-family: 'Press Start 2P', cursive;">GENERATING<br>${topic} QUIZ...</p>
+        </div>`;
 
     try {
         const response = await fetch('/api/generate-quiz', {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topic })
         });
+        
+        if (!response.ok) throw new Error("API Error");
+        
         const data = await response.json();
-        currentQuizData = Array.isArray(data) ? data : getMockQuizData(topic);
+        currentQuizData = (Array.isArray(data) && data.length > 0) ? data : getMockQuizData(topic);
+        
         topicSelection.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         startSoloGame();
     } catch (e) {
+        console.warn("Using mock data due to error", e);
+        // Fallback to mock data immediately
         currentQuizData = getMockQuizData(topic);
         topicSelection.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         startSoloGame();
     } finally {
-        topicSelection.innerHTML = originalContent;
-        initTopicSelection();
+        // Restore UI for next time
+        setTimeout(() => {
+            topicSelection.innerHTML = originalContent;
+            initTopicSelection();
+        }, 500);
     }
 }
 
@@ -177,98 +225,175 @@ function startSoloGame() {
     score = 0;
     wrongAnswers = [];
     endScreen.classList.add('hidden');
-    soloGame.classList.remove('hidden');
-    answersContainer.classList.remove('hidden');
+    
+    // Reset UI
+    saveScoreSection.classList.remove('hidden');
+    leaderboardSection.classList.add('hidden');
+    aiReviewSection.classList.add('hidden');
+    playerNameInput.value = "";
+    saveScoreBtn.disabled = false;
+    
     updateScore();
     displayQuestion();
 }
 
 function displayQuestion() {
     if (currentQuestionIndex >= currentQuizData.length) return showEndScreen();
+    
     const q = currentQuizData[currentQuestionIndex];
     questionNumberEl.innerText = currentQuestionIndex + 1;
     totalQuestionsEl.innerText = currentQuizData.length;
     questionTextEl.innerText = q.question;
+    
     answersContainer.innerHTML = '';
+    
+    // Randomize answers order if you want, but AI usually gives them fixed.
+    // Let's keep AI order for now or shuffle if needed.
+    
     q.answers.forEach(a => {
         const btn = document.createElement('button');
         btn.innerText = a;
-        btn.className = "bg-gray-700 hover:bg-gray-600 p-4 rounded text-xl";
+        btn.className = "bg-gray-700 hover:bg-gray-600 text-white p-6 rounded-xl text-lg md:text-xl transition-colors duration-200 border-b-4 border-gray-900 active:border-b-0 active:translate-y-1";
         btn.style.fontFamily = "'Press Start 2P', cursive";
-        btn.onclick = () => {
-            if (a === q.correct) score += 10;
-            else wrongAnswers.push(q);
-            currentQuestionIndex++;
-            updateScore();
-            displayQuestion();
-        };
+        btn.onclick = () => handleAnswer(a, q);
         answersContainer.appendChild(btn);
     });
+}
+
+function handleAnswer(selected, question) {
+    if (selected === question.correct) {
+        score += 10;
+        // Optional: Green flash on correct
+    } else {
+        wrongAnswers.push(question);
+        // Optional: Red flash on wrong
+    }
+    currentQuestionIndex++;
+    updateScore();
+    displayQuestion();
 }
 
 function updateScore() { scoreEl.innerText = score; }
 
 async function showEndScreen() {
-    soloGame.classList.add('hidden');
+    gameScreen.classList.add('hidden');
     endScreen.classList.remove('hidden');
     finalScoreEl.innerText = score;
-    saveScoreSection.classList.remove('hidden');
-    leaderboardSection.classList.add('hidden');
-    aiReviewSection.classList.add('hidden');
     
     if (wrongAnswers.length > 0) {
         aiReviewSection.classList.remove('hidden');
-        aiExplanationText.innerText = "AI가 해설을 작성 중입니다...";
+        aiExplanationText.innerText = "AI IS ANALYZING YOUR MISTAKES...";
+        
         try {
             const res = await fetch('/api/explain', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ wrongAnswers })
             });
-            const data = await res.json();
-            aiExplanationText.innerText = data.explanation;
-        } catch (e) { aiExplanationText.innerText = "해설을 가져오지 못했습니다."; }
+            if (res.ok) {
+                const data = await res.json();
+                aiExplanationText.innerText = data.explanation;
+            } else {
+                aiExplanationText.innerText = "COULD NOT LOAD EXPLANATION.";
+            }
+        } catch (e) { 
+            aiExplanationText.innerText = "AI CONNECTION FAILED."; 
+        }
     }
 }
 
-// --- Battle Mode & Leaderboard Logic (Same as before) ---
+// --- Battle Mode Logic ---
 function joinBattleRoom(roomId) {
+    if (!rtdb) return alert("Realtime DB Not Initialized");
+    
     currentRoomId = roomId;
     battleSetup.classList.add('hidden');
     battleScreen.classList.remove('hidden');
-    rtdb.ref(`rooms/${roomId}/players/${myPlayerId}`).set({ score: 0 });
-    currentQuizData = getMockQuizData("BATTLE");
-    displayBattleQuestion(0);
-    rtdb.ref(`rooms/${roomId}`).on('value', (s) => {
-        const data = s.val();
-        if (!data || !data.players) return;
-        let myS = 0, oppS = 0;
-        Object.keys(data.players).forEach(k => {
-            if (k === myPlayerId) myS = data.players[k].score || 0;
-            else oppS = data.players[k].score || 0;
-        });
-        updateBattleBars(myS, oppS);
-        battleStatus.innerText = Object.keys(data.players).length > 1 ? "BATTLE!" : "WAITING...";
-        battleAnswersContainer.classList.toggle('pointer-events-none', Object.keys(data.players).length < 2);
+    
+    // Reset visual
+    playerBar.style.width = '50%';
+    opponentBar.style.width = '50%';
+    battleStatus.innerText = "JOINING...";
+
+    // Register Player
+    rtdb.ref(`rooms/${roomId}/players/${myPlayerId}`).set({ 
+        score: 0,
+        lastActive: firebase.database.ServerValue.TIMESTAMP
     });
+    
+    // Use generic battle questions (or fetch from AI in future)
+    currentQuizData = getMockQuizData("BATTLE");
+    
+    // Listen for updates
+    rtdb.ref(`rooms/${roomId}`).on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data || !data.players) return;
+        
+        const players = data.players;
+        const playerIds = Object.keys(players);
+        
+        let myScore = 0;
+        let oppScore = 0;
+        
+        if (players[myPlayerId]) myScore = players[myPlayerId].score || 0;
+        
+        // Find opponent (anyone who is not me)
+        const opponentId = playerIds.find(id => id !== myPlayerId);
+        if (opponentId) oppScore = players[opponentId].score || 0;
+        
+        updateBattleBars(myScore, oppScore);
+        
+        if (playerIds.length >= 2) {
+            battleStatus.innerText = "FIGHT!";
+            battleStatus.classList.remove('animate-pulse');
+            battleStatus.classList.add('text-red-500');
+            battleAnswersContainer.classList.remove('opacity-50', 'pointer-events-none');
+        } else {
+            battleStatus.innerText = "WAITING FOR RIVAL...";
+            battleStatus.classList.add('animate-pulse');
+            battleStatus.classList.remove('text-red-500');
+            battleAnswersContainer.classList.add('opacity-50', 'pointer-events-none');
+        }
+    });
+    
+    displayBattleQuestion(0);
 }
 
 function updateBattleBars(myS, oppS) {
-    let myW = 50 + (myS - oppS) * 2;
-    myW = Math.max(10, Math.min(90, myW));
-    anime({ targets: '#player-bar', width: `${myW}%`, duration: 800 });
-    anime({ targets: '#opponent-bar', width: `${100 - myW}%`, duration: 800 });
+    // Determine advantage
+    // If scores are equal => 50%
+    // If I have 10 more => 60%?
+    // Let's say max diff of 50 points swings the bar fully
+    const diff = myS - oppS;
+    let myPercent = 50 + diff; // 1 point = 1% shift
+    
+    // Clamp
+    myPercent = Math.max(5, Math.min(95, myPercent));
+    
+    anime({ targets: '#player-bar', width: `${myPercent}%`, duration: 500, easing: 'easeOutQuad' });
+    anime({ targets: '#opponent-bar', width: `${100 - myPercent}%`, duration: 500, easing: 'easeOutQuad' });
 }
 
 function displayBattleQuestion(i) {
+    // Infinite loop for battle
     const q = currentQuizData[i % currentQuizData.length];
+    
     battleQuestionText.innerText = q.question;
     battleAnswersContainer.innerHTML = '';
+    
     q.answers.forEach(a => {
         const btn = document.createElement('button');
         btn.innerText = a;
-        btn.className = "bg-gray-700 p-4 rounded";
+        btn.className = "bg-gray-700 hover:bg-gray-600 text-white p-4 rounded-lg font-bold transition-all active:scale-95";
+        btn.style.fontFamily = "'Press Start 2P', cursive";
         btn.onclick = () => {
-            if (a === q.correct) rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}/score`).transaction(s => (s || 0) + 10);
+            if (a === q.correct) {
+                // +10 points
+                 rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}/score`).transaction(s => (s || 0) + 10);
+            } else {
+                // -5 points (penalty)
+                 rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}/score`).transaction(s => Math.max(0, (s || 0) - 5));
+            }
             displayBattleQuestion(i + 1);
         };
         battleAnswersContainer.appendChild(btn);
@@ -277,20 +402,38 @@ function displayBattleQuestion(i) {
 
 function fetchAndDisplayLeaderboard() {
     leaderboardSection.classList.remove('hidden');
-    db.collection("scores").orderBy("score", "desc").limit(10).get().then(s => {
-        leaderboardList.innerHTML = '';
-        s.forEach((doc, i) => {
-            const d = doc.data();
-            const li = document.createElement('li');
-            li.innerHTML = `<span>#${i+1} ${d.name}</span> <span class="float-right text-green-400">${d.score}</span>`;
-            leaderboardList.appendChild(li);
+    leaderboardList.innerHTML = '<li class="text-center py-4">LOADING...</li>';
+    
+    db.collection("scores").orderBy("score", "desc").limit(10).get()
+        .then(s => {
+            leaderboardList.innerHTML = '';
+            let rank = 1;
+            s.forEach(doc => {
+                const d = doc.data();
+                const li = document.createElement('li');
+                li.className = "flex justify-between items-center border-b border-gray-700 py-2 last:border-0";
+                li.innerHTML = `
+                    <div>
+                        <span class="text-yellow-500 font-bold w-6 inline-block">${rank}.</span>
+                        <span>${d.name}</span>
+                    </div>
+                    <span class="text-green-400 font-mono">${d.score}</span>
+                `;
+                leaderboardList.appendChild(li);
+                rank++;
+            });
+            if (s.empty) leaderboardList.innerHTML = '<li class="text-center text-gray-500 py-4">NO RECORDS</li>';
+        })
+        .catch(e => {
+            console.error(e);
+            leaderboardList.innerHTML = '<li class="text-center text-red-500">ERROR</li>';
         });
-    });
 }
 
 function getMockQuizData(t) {
     return [
-        { question: `${t}에 대한 첫 번째 문제입니다.`, answers: ["정답", "오답1", "오답2", "오답3"], correct: "정답" },
-        { question: `${t}에 대한 두 번째 문제입니다.`, answers: ["정답", "오답1", "오답2", "오답3"], correct: "정답" }
+        { question: `${t}: 1 + 1 = ?`, answers: ["2", "1", "3", "0"], correct: "2" },
+        { question: `${t}: 수도는?`, answers: ["서울", "부산", "대구", "광주"], correct: "서울" },
+        { question: `${t}: 사과 색깔은?`, answers: ["빨강", "파랑", "검정", "흰색"], correct: "빨강" },
     ];
 }
