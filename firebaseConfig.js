@@ -1,5 +1,5 @@
 // Firebase Configuration for AI Quiz Battle
-const firebaseConfig = {
+var firebaseConfig = {
   apiKey: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY",
   authDomain: "ai-quiz-f8680.firebaseapp.com",
   projectId: "ai-quiz-f8680",
