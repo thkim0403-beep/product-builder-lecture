@@ -430,10 +430,33 @@ function fetchAndDisplayLeaderboard() {
         });
 }
 
-function getMockQuizData(t) {
+function getMockQuizData(topic) {
+    // Fallback questions in case AI fails
+    if (topic === "한국사") {
+        return [
+            { question: "조선의 제1대 왕은 누구인가요?", answers: ["태조 이성계", "세종대왕", "정조", "연산군"], correct: "태조 이성계" },
+            { question: "임진왜란이 일어난 해는?", answers: ["1392년", "1592년", "1910년", "1950년"], correct: "1592년" },
+            { question: "훈민정음을 창제한 왕은?", answers: ["영조", "태종", "세종대왕", "고종"], correct: "세종대왕" }
+        ];
+    }
+    if (topic === "과학") {
+        return [
+            { question: "물의 화학식은?", answers: ["CO2", "H2O", "O2", "NaCl"], correct: "H2O" },
+            { question: "태양계에서 가장 큰 행성은?", answers: ["지구", "화성", "목성", "토성"], correct: "목성" },
+            { question: "만유인력의 법칙을 발견한 사람은?", answers: ["뉴턴", "아인슈타인", "갈릴레이", "에디슨"], correct: "뉴턴" }
+        ];
+    }
+    if (topic === "스포츠") {
+        return [
+            { question: "손흥민 선수의 소속팀은? (2024 기준)", answers: ["토트넘", "맨유", "첼시", "리버풀"], correct: "토트넘" },
+            { question: "야구는 몇 명이서 하는 게임인가요?", answers: ["9명", "11명", "5명", "7명"], correct: "9명" },
+            { question: "월드컵은 몇 년마다 열리나요?", answers: ["2년", "3년", "4년", "5년"], correct: "4년" }
+        ];
+    }
+    // Default generic questions for other topics
     return [
-        { question: `${t}: 1 + 1 = ?`, answers: ["2", "1", "3", "0"], correct: "2" },
-        { question: `${t}: 수도는?`, answers: ["서울", "부산", "대구", "광주"], correct: "서울" },
-        { question: `${t}: 사과 색깔은?`, answers: ["빨강", "파랑", "검정", "흰색"], correct: "빨강" },
+        { question: `${topic} 분야의 기초 문제입니다. 정답은 1번입니다.`, answers: ["정답", "오답", "오답", "오답"], correct: "정답" },
+        { question: `${topic} 퀴즈가 AI 연결 문제로 대체되었습니다.`, answers: ["확인", "취소", "모름", "글쎄요"], correct: "확인" },
+        { question: "다음 중 해당 주제와 관련 없는 것은?", answers: ["관련 없음", "관련 있음", "관련 있음", "관련 있음"], correct: "관련 없음" }
     ];
 }
