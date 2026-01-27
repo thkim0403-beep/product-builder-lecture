@@ -8,62 +8,64 @@ export async function onRequestPost(context) {
             return new Response('Missing topic in request body', { status: 400 });
         }
 
-        // AI 바인딩이 설정되어 있는지 확인
+        // AI 바인딩 확인
         if (!env.AI) {
-            throw new Error('AI binding not found. Please configure "AI" binding in Cloudflare Pages settings.');
+            console.error("AI Binding is MISSING. Check Cloudflare Dashboard Settings.");
+            throw new Error('AI binding not found on server.');
         }
 
         const prompt = `
-            Generate 10 quiz questions about "${topic}".
-            The response must be a valid JSON array of objects. Do not include any text outside of the JSON array.
-            Each object in the array must have the following structure:
-            {
-                "question": "Your question here",
-                "answers": ["Answer 1", "Answer 2", "Answer 3", "Answer 4"],
-                "correct": "The correct answer"
-            }
+            Generate 10 quiz questions about "${topic}" in Korean.
+            The response MUST be a raw JSON array. Do NOT use Markdown code blocks.
+            Format:
+            [
+              {
+                "question": "Question text",
+                "answers": ["Option1", "Option2", "Option3", "Option4"],
+                "correct": "Correct Option"
+              }
+            ]
         `;
+
+        console.log(`Requesting AI for topic: ${topic}`);
 
         const aiResponse = await env.AI.run('@cf/meta/llama-2-7b-chat-int8', {
             prompt: prompt,
         });
 
-        // AI 응답 파싱 (Markdown 코드 블록 제거 등)
+        console.log("Raw AI Response:", JSON.stringify(aiResponse));
+
+        // AI 응답 처리
         let jsonResponse = '';
-        if (aiResponse && aiResponse.response) {
-            jsonResponse = aiResponse.response.trim();
+        if (aiResponse && typeof aiResponse === 'object') {
+            // response 프로퍼티가 있으면 사용, 없으면 전체를 문자열로 간주 시도
+            jsonResponse = aiResponse.response || JSON.stringify(aiResponse);
         } else {
-             // AI 응답 구조가 다를 경우를 대비한 직접 접근
-             jsonResponse = JSON.stringify(aiResponse).trim();
+            jsonResponse = String(aiResponse);
         }
 
-        if (jsonResponse.startsWith('```json')) {
-            jsonResponse = jsonResponse.substring(7, jsonResponse.length - 3).trim();
-        } else if (jsonResponse.startsWith('`')) {
-            jsonResponse = jsonResponse.substring(1, jsonResponse.length - 1).trim();
-        }
+        // Markdown 코드 블록 제거 (```json ... ```)
+        jsonResponse = jsonResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
         // 유효한 JSON인지 확인
         let quiz;
         try {
             quiz = JSON.parse(jsonResponse);
         } catch (jsonError) {
-            console.error("JSON Parse Error:", jsonResponse);
-            return new Response(JSON.stringify({ error: "Failed to parse AI response", raw: jsonResponse }), {
-                status: 500,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            console.error("JSON Parse Error. Invalid string:", jsonResponse);
+            throw new Error(`Failed to parse AI response: ${jsonError.message}`);
         }
 
         return new Response(JSON.stringify(quiz), {
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
         });
 
     } catch (e) {
-        console.error(e);
-        return new Response(JSON.stringify({ error: e.message }), { 
+        console.error("Server Error:", e);
+        return new Response(JSON.stringify({ 
+            error: e.message, 
+            stack: e.stack 
+        }), { 
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
