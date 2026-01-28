@@ -53,31 +53,110 @@ let db;
 let rtdb;
 let myPlayerId = 'player_' + Math.random().toString(36).substr(2, 9);
 let currentRoomId = null;
+let currentDifficulty = 'Medium';
+let currentLanguage = 'ko'; // 'ko' or 'en'
+
+const TRANSLATIONS = {
+    ko: {
+        soloMode: "SOLO MODE",
+        battleMode: "BATTLE MODE",
+        chooseTopic: "CHOOSE TOPIC",
+        backToMenu: "BACK TO MENU",
+        enterRoomId: "ENTER ROOM ID",
+        joinBattle: "JOIN BATTLE",
+        quitBattle: "QUIT BATTLE",
+        quitGame: "QUIT GAME",
+        gameOver: "GAME OVER",
+        finalScore: "FINAL SCORE",
+        save: "SAVE",
+        playAgain: "PLAY AGAIN",
+        share: "SHARE IMAGE",
+        topRanking: "TOP 10 RANKING",
+        aiReview: "AI REVIEW",
+        generating: "GENERATING QUIZ...",
+        fight: "FIGHT!",
+        waiting: "WAITING...",
+        loading: "LOADING..."
+    },
+    en: {
+        soloMode: "SOLO MODE",
+        battleMode: "BATTLE MODE",
+        chooseTopic: "CHOOSE TOPIC",
+        backToMenu: "BACK TO MENU",
+        enterRoomId: "ENTER ROOM ID",
+        joinBattle: "JOIN BATTLE",
+        quitBattle: "QUIT BATTLE",
+        quitGame: "QUIT GAME",
+        gameOver: "GAME OVER",
+        finalScore: "FINAL SCORE",
+        save: "SAVE",
+        playAgain: "PLAY AGAIN",
+        share: "SHARE IMAGE",
+        topRanking: "TOP 10 RANKING",
+        aiReview: "AI REVIEW",
+        generating: "GENERATING QUIZ...",
+        fight: "FIGHT!",
+        waiting: "WAITING...",
+        loading: "LOADING..."
+    }
+};
 
 const TOPICS = [
-    { name: "한국사", icon: "🇰🇷" },
-    { name: "일반상식", icon: "🧠" },
-    { name: "과학", icon: "🧪" },
-    { name: "스포츠", icon: "⚽" },
-    { name: "영화", icon: "🎬" },
-    { name: "음악", icon: "🎵" }
+    { id: "history", name: "한국사", nameEn: "World History", icon: "🇰🇷", iconEn: "🌍" },
+    { id: "general", name: "일반상식", nameEn: "General Knowledge", icon: "🧠", iconEn: "💡" },
+    { id: "science", name: "과학", nameEn: "Science", icon: "🧪", iconEn: "🔬" },
+    { id: "sports", name: "스포츠", nameEn: "Sports", icon: "⚽", iconEn: "🏆" },
+    { id: "movies", name: "영화", nameEn: "Movies", icon: "🎬", iconEn: "🍿" },
+    { id: "music", name: "음악", nameEn: "Music", icon: "🎵", iconEn: "🎸" },
+    { id: "geography", name: "지리/여행", nameEn: "Geography", icon: "🗺️", iconEn: "✈️" }
 ];
 
 // --- Initialization ---
 function initTopicSelection() {
+    // ... (rest of the logic) ...
+}
+
+function renderTopics() {
     if (!topicsGrid) return;
     topicsGrid.innerHTML = '';
     TOPICS.forEach(topic => {
         const btn = document.createElement('button');
-        btn.innerHTML = `<div class="text-3xl mb-2">${topic.icon}</div><div class="text-sm">${topic.name}</div>`;
+        const displayName = currentLanguage === 'ko' ? topic.name : topic.nameEn;
+        const displayIcon = currentLanguage === 'ko' ? topic.icon : (topic.iconEn || topic.icon);
+        
+        btn.innerHTML = `<div class="text-3xl mb-2">${displayIcon}</div><div class="text-sm">${displayName}</div>`;
         btn.className = "bg-gray-800 hover:bg-gray-700 text-white p-6 rounded-xl border-2 border-transparent hover:border-blue-500 transition-all flex flex-col items-center justify-center";
         btn.style.fontFamily = "'Press Start 2P', cursive";
-        btn.addEventListener('click', () => fetchQuiz(topic.name));
+        btn.addEventListener('click', () => fetchQuiz(topic.id)); // Send unique ID (history, science, etc.)
         topicsGrid.appendChild(btn);
     });
 }
 
+function updateLanguageUI() {
+    const t = TRANSLATIONS[currentLanguage];
+    
+    // Update simple text elements
+    if(soloModeBtn) soloModeBtn.innerText = t.soloMode;
+    if(battleModeBtn) battleModeBtn.innerText = t.battleMode;
+    document.querySelector('#topic-selection h2').innerText = t.chooseTopic;
+    if(backToMenuFromTopic) backToMenuFromTopic.innerText = t.backToMenu;
+    if(backToMenuFromBattle) backToMenuFromBattle.innerText = t.backToMenu;
+    if(quitBattleBtn) quitBattleBtn.innerText = t.quitBattle;
+    if(backToMenuBtn) backToMenuBtn.innerText = t.quitGame;
+    document.querySelector('#end-screen h2').innerText = t.gameOver;
+    document.querySelector('#end-screen p').innerHTML = `${t.finalScore}: <span id="final-score" class="text-green-400">${score}</span>`;
+    if(saveScoreBtn) saveScoreBtn.innerText = t.save;
+    if(playAgainBtn) playAgainBtn.innerText = t.playAgain;
+    if(shareImgBtn) shareImgBtn.innerText = t.share;
+    document.querySelector('#leaderboard-section h3').innerText = t.topRanking;
+    document.querySelector('#ai-review-section h3 span:last-child').innerText = t.aiReview;
+
+    renderTopics();
+}
+
 initTopicSelection();
+// Call updateLanguageUI once to set initial text
+updateLanguageUI();
 
 // --- Firebase Initialization ---
 try {
@@ -181,19 +260,25 @@ shareImgBtn.addEventListener('click', async () => {
 });
 
 // --- Solo Game Logic ---
-async function fetchQuiz(topic) {
+async function fetchQuiz(topicId) {
     const originalContent = topicSelection.innerHTML;
+    const t = TRANSLATIONS[currentLanguage];
+    
+    // Display name logic for loading screen
+    const topicObj = TOPICS.find(tp => tp.id === topicId);
+    const displayTopic = currentLanguage === 'ko' ? topicObj.name : topicObj.nameEn;
+
     topicSelection.innerHTML = `
         <div class="flex flex-col items-center justify-center space-y-8 py-20">
             <div class="animate-spin rounded-full h-20 w-20 border-t-4 border-b-4 border-blue-500"></div>
-            <p class="text-xl animate-pulse text-blue-400" style="font-family: 'Press Start 2P', cursive;">GENERATING<br>${topic} QUIZ...</p>
+            <p class="text-xl animate-pulse text-blue-400" style="font-family: 'Press Start 2P', cursive;">${t.generating}<br>${displayTopic}</p>
         </div>`;
 
     try {
         const response = await fetch('/api/generate-quiz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic })
+            body: JSON.stringify({ topic: topicId, difficulty: currentDifficulty, lang: currentLanguage })
         });
         
         if (!response.ok) throw new Error("API Error");
@@ -261,13 +346,36 @@ function displayQuestion() {
 }
 
 function handleAnswer(selected, question) {
-    if (selected === question.correct) {
+    const isCorrect = selected === question.correct;
+    
+    if (isCorrect) {
         score += 10;
         // Optional: Green flash on correct
     } else {
         wrongAnswers.push(question);
         // Optional: Red flash on wrong
     }
+    
+    // --- Record Statistics (Fire & Forget) ---
+    if (db) {
+        // Create a safe ID from the question text (remove special chars, limit length)
+        const safeId = question.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
+        
+        const statsRef = db.collection("question_stats").doc(safeId);
+        
+        statsRef.set({
+            question: question.question,
+            topic: question.topic || "Unknown", // Assuming topic is passed in question object or accessible
+            lastPlayed: new Date()
+        }, { merge: true });
+
+        statsRef.update({
+            totalAttempts: firebase.firestore.FieldValue.increment(1),
+            correctCount: firebase.firestore.FieldValue.increment(isCorrect ? 1 : 0),
+            wrongCount: firebase.firestore.FieldValue.increment(isCorrect ? 0 : 1)
+        }).catch(e => console.log("Stats update failed (might be first time):", e));
+    }
+
     currentQuestionIndex++;
     updateScore();
     displayQuestion();

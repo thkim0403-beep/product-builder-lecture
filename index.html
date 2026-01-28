@@ -11,11 +11,20 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4845864516944108" crossorigin="anonymous"></script>
 </head>
 <body class="bg-gray-900 text-white select-none">
     <div id="app" class="container mx-auto p-4 text-center min-h-screen flex flex-col items-center justify-center">
-        <h1 class="text-3xl md:text-5xl font-bold mb-12 text-yellow-400 drop-shadow-md" style="font-family: 'Press Start 2P', cursive;">AI QUIZ BATTLE</h1>
+        <h1 class="text-3xl md:text-5xl font-bold mb-4 text-yellow-400 drop-shadow-md" style="font-family: 'Press Start 2P', cursive;">AI QUIZ BATTLE</h1>
         
+        <!-- Language Selection -->
+        <div id="lang-selection" class="flex justify-center gap-4 mb-12">
+            <button class="lang-btn px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold border border-gray-500 text-gray-300 transition-all opacity-100 ring-2 ring-yellow-400 scale-105" data-lang="ko">🇰🇷 KOREAN</button>
+            <button class="lang-btn px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold border border-gray-500 text-gray-300 transition-all opacity-60" data-lang="en">🇺🇸 ENGLISH</button>
+        </div>
+
         <!-- Mode Selection -->
         <div id="mode-selection" class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8">
             <button id="solo-mode-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 px-10 rounded-xl text-xl w-64 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-transform hover:scale-105" style="font-family: 'Press Start 2P', cursive;">SOLO MODE</button>
@@ -25,6 +34,13 @@
         <!-- Solo Topic Selection -->
         <div id="topic-selection" class="hidden w-full max-w-4xl">
             <h2 class="text-2xl mb-8 text-blue-400" style="font-family: 'Press Start 2P', cursive;">CHOOSE TOPIC</h2>
+            
+            <div id="difficulty-selection" class="flex justify-center gap-4 mb-8" style="font-family: 'Press Start 2P', cursive;">
+                <button class="difficulty-btn px-4 py-2 bg-gray-700 hover:bg-green-600 rounded text-xs md:text-sm font-bold border-2 border-transparent focus:border-white transition-all text-gray-300 hover:text-white" data-level="Easy">EASY</button>
+                <button class="difficulty-btn px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs md:text-sm font-bold border-2 border-white transition-all text-white shadow-[0_0_10px_rgba(37,99,235,0.5)]" data-level="Medium">MEDIUM</button>
+                <button class="difficulty-btn px-4 py-2 bg-gray-700 hover:bg-red-600 rounded text-xs md:text-sm font-bold border-2 border-transparent focus:border-white transition-all text-gray-300 hover:text-white" data-level="Hard">HARD</button>
+            </div>
+
             <div id="topics-grid" class="grid grid-cols-2 md:grid-cols-3 gap-6">
                 <!-- Topic buttons will be generated here -->
             </div>
@@ -87,6 +103,19 @@
             <h2 class="text-3xl md:text-5xl font-bold text-yellow-500 mb-8 drop-shadow-lg" style="font-family: 'Press Start 2P', cursive;">GAME OVER</h2>
             <p class="text-2xl md:text-3xl mb-8">FINAL SCORE: <span id="final-score" class="text-green-400">0</span></p>
             
+            <!-- AdSense Unit (Result Screen) -->
+            <div class="w-full mb-8 flex justify-center bg-gray-800 rounded-lg p-2 overflow-hidden">
+                <ins class="adsbygoogle"
+                     style="display:block; min-width: 250px; min-height: 250px;"
+                     data-ad-client="ca-pub-4845864516944108"
+                     data-ad-slot="6864768465"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
+            </div>
+
             <!-- AI Explanation Section -->
             <div id="ai-review-section" class="hidden mb-8 text-left bg-gray-800 p-6 rounded-lg border border-blue-500/50">
                 <h3 class="text-lg text-blue-400 mb-4 flex items-center gap-2" style="font-family: 'Press Start 2P', cursive;">
