@@ -323,6 +323,11 @@ try {
 // --- Navigation Functions ---
 function resetToMainMenu() {
     modeSelection.classList.remove('hidden');
+    
+    // Show lang buttons again
+    const langSel = document.getElementById('lang-selection');
+    if(langSel) langSel.classList.remove('hidden');
+
     topicSelection.classList.add('hidden');
     battleSetup.classList.add('hidden');
     battleScreen.classList.add('hidden');
@@ -339,21 +344,22 @@ function resetToMainMenu() {
 
 // --- Solo Game Logic ---
 async function fetchQuiz(topicId) {
-    const originalContent = topicSelection.innerHTML;
     const t = TRANSLATIONS[currentLanguage];
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingText = document.getElementById('loading-text');
     
+    // Display name logic for loading screen
     const topicObj = TOPICS.find(tp => tp.id === topicId);
     const displayTopic = currentLanguage === 'ko' ? topicObj.name : topicObj.nameEn;
 
-    topicSelection.innerHTML = `
-        <div class="flex flex-col items-center justify-center space-y-8 py-20">
-            <div class="animate-spin rounded-full h-20 w-20 border-t-4 border-b-4 border-blue-500"></div>
-            <p class="text-xl animate-pulse text-blue-400" style="font-family: 'Press Start 2P', cursive;">${t.generating}<br>${displayTopic}</p>
-        </div>`;
+    // Show Loading
+    topicSelection.classList.add('hidden');
+    loadingScreen.classList.remove('hidden');
+    if(loadingText) loadingText.innerHTML = `${t.generating}<br>${displayTopic}`;
 
     try {
         const payload = { topic: topicId, difficulty: currentDifficulty, lang: currentLanguage };
-        console.log("Sending Request:", payload); // Debug Log
+        console.log("Sending Request:", payload);
 
         const response = await fetch('/api/generate-quiz', {
             method: 'POST',
@@ -361,33 +367,24 @@ async function fetchQuiz(topicId) {
             body: JSON.stringify(payload)
         });
         
-        // Debug: Show server logs
         const debugInfo = response.headers.get('X-Debug-Log');
-        if (debugInfo) {
-            console.log("Server Debug Log:", JSON.parse(debugInfo));
-            // alert("Server Debug: " + debugInfo); // Uncomment to see alert
-        }
+        if (debugInfo) console.log("Server Debug Log:", JSON.parse(debugInfo));
         
         if (!response.ok) throw new Error("API Error");
         
         const data = await response.json();
         currentQuizData = (Array.isArray(data) && data.length > 0) ? data : getMockQuizData(topicId);
         
-        topicSelection.classList.add('hidden');
-        gameScreen.classList.remove('hidden');
+        loadingScreen.classList.add('hidden'); // Hide loading
+        gameScreen.classList.remove('hidden'); // Show game
         startSoloGame();
     } catch (e) {
         console.warn("Using mock data due to error", e);
         currentQuizData = getMockQuizData(topicId);
-        topicSelection.classList.add('hidden');
+        
+        loadingScreen.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         startSoloGame();
-    } finally {
-        setTimeout(() => {
-            topicSelection.innerHTML = originalContent;
-            renderTopics();
-            initTopicScreenListeners(); 
-        }, 500);
     }
 }
 
@@ -396,6 +393,10 @@ function startSoloGame() {
     score = 0;
     wrongAnswers = [];
     endScreen.classList.add('hidden');
+    
+    // Hide top navigation during game
+    const langSel = document.getElementById('lang-selection');
+    if(langSel) langSel.classList.add('hidden');
     
     saveScoreSection.classList.remove('hidden');
     leaderboardSection.classList.add('hidden');
@@ -601,15 +602,29 @@ function fetchAndDisplayLeaderboard() {
 }
 
 function getMockQuizData(topic) {
-    if (topic === "history") {
+    if (currentLanguage === 'ko') {
+        // Emergency Fallback: Korean Mock Data
         return [
-            { question: "조선의 제1대 왕은 누구인가요?", answers: ["태조 이성계", "세종대왕", "정조", "연산군"], correct: "태조 이성계" },
-            { question: "임진왜란이 일어난 해는?", answers: ["1392년", "1592년", "1910년", "1950년"], correct: "1592년" },
-            { question: "훈민정음을 창제한 왕은?", answers: ["영조", "태종", "세종대왕", "고종"], correct: "세종대왕" }
+            { question: "현재 AI 서버 연결이 지연되고 있습니다. 이 문제는 비상용 샘플 문제입니다.", answers: ["확인", "취소", "무시", "모름"], correct: "확인" },
+            { question: "임진왜란이 일어난 해는 언제인가요?", answers: ["1592년", "1950년", "1392년", "1894년"], correct: "1592년" },
+            { question: "대한민국의 수도는 어디인가요?", answers: ["서울", "부산", "인천", "대구"], correct: "서울" },
+            { question: "BTS의 멤버가 아닌 사람은?", answers: ["싸이", "RM", "정국", "지민"], correct: "싸이" },
+            { question: "영화 '기생충'의 감독은?", answers: ["봉준호", "박찬욱", "이창동", "홍상수"], correct: "봉준호" },
+            { question: "한글을 창제한 왕은?", answers: ["세종대왕", "태조", "영조", "정조"], correct: "세종대왕" },
+            { question: "독도는 어느 나라 땅인가요?", answers: ["대한민국", "일본", "미국", "중국"], correct: "대한민국" },
+            { question: "손흥민 선수가 소속된 리그는?", answers: ["프리미어리그", "라리가", "분데스리가", "세리에A"], correct: "프리미어리그" },
+            { question: "물(H2O)을 구성하는 원소가 아닌 것은?", answers: ["탄소", "수소", "산소", "없음"], correct: "탄소" },
+            { question: "대한민국의 국화(나라꽃)는?", answers: ["무궁화", "장미", "진달래", "벚꽃"], correct: "무궁화" }
         ];
     }
+    
+    // English Mock Data
     return [
-        { question: `Mock Question for ${topic}`, answers: ["A", "B", "C", "D"], correct: "A" }
+        { question: "Server is busy. This is a sample question.", answers: ["OK", "Cancel", "Ignore", "Unknown"], correct: "OK" },
+        { question: "What is the capital of South Korea?", answers: ["Seoul", "Busan", "Incheon", "Daegu"], correct: "Seoul" },
+        { question: "Which year did WW2 end?", answers: ["1945", "1939", "1918", "1950"], correct: "1945" },
+        { question: "Who directed the movie 'Parasite'?", answers: ["Bong Joon-ho", "Park Chan-wook", "Lee Chang-dong", "Hong Sang-soo"], correct: "Bong Joon-ho" },
+        { question: "What is the chemical formula for water?", answers: ["H2O", "CO2", "NaCl", "O2"], correct: "H2O" }
     ];
 }
 
