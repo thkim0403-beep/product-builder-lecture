@@ -34,6 +34,7 @@ export async function onRequestPost(context) {
         let promptMode = 'GENERATE'; 
         let sourceQuestions = [];
         let factContext = "";
+        let debugLog = []; // Collect debug info
 
         // --- STRATEGY: SPLIT BY LANGUAGE ---
 
@@ -51,41 +52,58 @@ export async function onRequestPost(context) {
 
                 if (apiData.response_code === 0 && apiData.results.length > 0) {
                     sourceQuestions = apiData.results;
-                    promptMode = 'FORMAT_ONLY'; // Use English questions directly
+                    promptMode = 'FORMAT_ONLY';
+                    debugLog.push("OpenTrivia Success");
+                } else {
+                    debugLog.push(`OpenTrivia Failed: Code ${apiData.response_code}`);
                 }
             } catch (err) {
                 console.error("Open Trivia DB Fetch Failed:", err);
+                debugLog.push(`OpenTrivia Error: ${err.message}`);
             }
         } 
         
         // 2. KOREAN MODE -> Use Naver Open API (Encyclopedia)
-        else if (lang === 'ko' && env.NAVER_CLIENT_ID && TOPIC_KEYWORDS[topic]) {
-            try {
-                const keywords = TOPIC_KEYWORDS[topic];
-                // Pick 3 random keywords for variety
-                const selectedKeywords = keywords.sort(() => 0.5 - Math.random()).slice(0, 3);
-                
-                let searchResults = [];
-                for (const kw of selectedKeywords) {
-                    const naverRes = await fetch(`https://openapi.naver.com/v1/search/encyc.json?query=${encodeURIComponent(kw)}&display=2`, {
-                        headers: {
-                            "X-Naver-Client-Id": env.NAVER_CLIENT_ID,
-                            "X-Naver-Client-Secret": env.NAVER_CLIENT_SECRET
+        else if (lang === 'ko' && TOPIC_KEYWORDS[topic]) {
+            if (!env.NAVER_CLIENT_ID) {
+                debugLog.push("Naver Keys Missing in Env");
+            } else {
+                try {
+                    const keywords = TOPIC_KEYWORDS[topic];
+                    const selectedKeywords = keywords.sort(() => 0.5 - Math.random()).slice(0, 3);
+                    debugLog.push(`Naver Keywords: ${selectedKeywords.join(',')}`);
+                    
+                    let searchResults = [];
+                    for (const kw of selectedKeywords) {
+                        const naverRes = await fetch(`https://openapi.naver.com/v1/search/encyc.json?query=${encodeURIComponent(kw)}&display=2`, {
+                            headers: {
+                                "X-Naver-Client-Id": env.NAVER_CLIENT_ID,
+                                "X-Naver-Client-Secret": env.NAVER_CLIENT_SECRET
+                            }
+                        });
+                        
+                        if (!naverRes.ok) {
+                            debugLog.push(`Naver Fetch Error: ${naverRes.status}`);
+                            continue;
                         }
-                    });
-                    const naverData = await naverRes.json();
-                    if (naverData.items && naverData.items.length > 0) {
-                        searchResults.push(...naverData.items.map(item => `[키워드: ${kw}] ${item.title.replace(/<[^>]*>?/gm, '')}: ${item.description.replace(/<[^>]*>?/gm, '')}`));
-                    }
-                }
 
-                if (searchResults.length > 0) {
-                    factContext = searchResults.join("\n\n");
-                    promptMode = 'NAVER_FACTS';
+                        const naverData = await naverRes.json();
+                        if (naverData.items && naverData.items.length > 0) {
+                            searchResults.push(...naverData.items.map(item => `[키워드: ${kw}] ${item.title.replace(/<[^>]*>?/gm, '')}: ${item.description.replace(/<[^>]*>?/gm, '')}`));
+                        }
+                    }
+
+                    if (searchResults.length > 0) {
+                        factContext = searchResults.join("\n\n");
+                        promptMode = 'NAVER_FACTS';
+                        debugLog.push("Naver Success");
+                    } else {
+                        debugLog.push("Naver No Results");
+                    }
+                } catch (err) {
+                    console.error("Naver API Fetch Failed:", err);
+                    debugLog.push(`Naver Exception: ${err.message}`);
                 }
-            } catch (err) {
-                console.error("Naver API Fetch Failed:", err);
-                // Fallback will be pure generation
             }
         }
 
@@ -97,7 +115,9 @@ export async function onRequestPost(context) {
             // ENGLISH: Reformat Open Trivia DB
             systemPrompt = `You are a quiz formatter. Reformat the provided questions into: QUESTION|CORRECT|WRONG1|WRONG2|WRONG3. No extra text.`;
              const sourceText = sourceQuestions.map((q, i) => {
-                return `Q: ${q.question} \nCorrect: ${q.correct_answer} \nWrongs: ${q.incorrect_answers.join(', ')}`;
+                return `Q: ${q.question} 
+Correct: ${q.correct_answer} 
+Wrongs: ${q.incorrect_answers.join(', ')}`;
             }).join('\n\n');
             userPrompt = `Reformat these:\n${sourceText}`;
 
@@ -116,8 +136,7 @@ export async function onRequestPost(context) {
             userPrompt = `[참고 자료 - 네이버 백과사전]:\n${factContext}\n\n위 자료를 바탕으로 ${difficulty} 난이도의 한국어 퀴즈 10문제를 만들어주세요.`;
 
         } else {
-            // FALLBACK: Pure AI Generation (Global Fallback or Keys missing)
-            // ... (rest of the code)
+            // FALLBACK: Pure AI Generation
             if (lang === 'en') {
                 systemPrompt = `You are a professional Quiz Master. Generate 10 high-quality trivia questions in English about "${topic}".
                 Format: QUESTION|CORRECT|WRONG1|WRONG2|WRONG3
@@ -134,47 +153,33 @@ export async function onRequestPost(context) {
                 userPrompt = `Generate 10 ${difficultyGuide} questions about "${topic}".`;
                 
             } else {
-                // (Existing Korean Generation Logic)
-                systemPrompt = `You are a professional Korean quiz master. 
-                Your absolute priority is to generate questions in **NATURAL, NATIVE-LEVEL KOREAN**.
+                // *** STRICT KOREAN MODE ***
+                systemPrompt = `당신은 영어를 전혀 할 줄 모르는 순수 토종 한국인 퀴즈 출제자입니다.
+                당신의 임무는 오직 '한국어'로만 퀴즈를 만드는 것입니다. 영어는 절대 사용하지 마세요.
                 
-                CRITICAL RULES:
-                1. **NO TRANSLATIONESE**: Do not use awkward translated phrases. Use natural spoken or written Korean.
-                2. **Concise Questions**: Keep questions short and clear.
-                3. **Plausible Wrong Answers**: Wrong answers must be related to the topic and confusing.
-                4. **Format**: QUESTION|CORRECT|WRONG1|WRONG2|WRONG3
-                5. **No Extra Text**: Output exactly 10 lines. No numbering.
-        
-                Bad Example (Don't do this):
-                사과에 대한 설명으로 옳은 것은 무엇입니까? (Too stiff)
-                
-                Good Example (Do this):
-                다음 중 사과의 특징으로 알맞은 것은? (Natural)
-                `;
+                [절대 규칙]
+                1. 모든 질문, 정답, 오답은 반드시 **한국어(Korean)**여야 합니다.
+                2. 질문 형식: "~은 무엇인가요?", "~로 알맞은 것은?" (자연스러운 해요체)
+                3. 출력 형식: 문제|정답|오답1|오답2|오답3
+                4. 번역투 문장(~에 대하여 등)을 쓰면 해고됩니다.
+                5. 정확히 10줄만 출력하세요.`;
         
                 let difficultyGuide = "";
                 switch (difficulty) {
-                    case 'Easy':
-                        difficultyGuide = "Difficulty: Easy. Basic facts everyone knows. (초등학생 수준)";
-                        break;
-                    case 'Medium':
-                        difficultyGuide = "Difficulty: Medium. Requires high school level knowledge. (일반 성인 상식 수준)";
-                        break;
-                    case 'Hard':
-                        difficultyGuide = "Difficulty: Hard. Expert knowledge, specific dates/figures. (전문가/매니아 수준)";
-                        break;
-                    default:
-                        difficultyGuide = "Difficulty: Standard balance.";
+                    case 'Easy': difficultyGuide = "난이도: 쉬움 (초등학생 수준)"; break;
+                    case 'Medium': difficultyGuide = "난이도: 보통 (일반인 상식)"; break;
+                    case 'Hard': difficultyGuide = "난이도: 어려움 (전문가 수준)"; break;
+                    default: difficultyGuide = "난이도: 랜덤";
                 }
         
-                userPrompt = `Generate 10 multiple-choice quiz questions about "${topic}" in Korean.
+                userPrompt = `주제: "${topic}"에 대한 한국어 객관식 퀴즈 10개를 만들어주세요.
                 ${difficultyGuide}
                 
-                Format example:
-                이순신 장군이 전사한 해전은?|노량해전|명량해전|한산도대첩|부산포해전
-                물의 화학식으로 올바른 것은?|H2O|CO2|O2|NaCl
+                예시:
+                임진왜란 때 활약한 거북선을 만든 사람은?|이순신|장영실|세종대왕|안중근
+                물의 화학식은 무엇인가요?|H2O|CO2|NaCl|O2
                 
-                Now generate 10 questions for topic: "${topic}"`;
+                위 예시처럼 완벽한 한국어로 출력하세요. 영어 금지.`;
             }
         }
 
@@ -183,7 +188,7 @@ export async function onRequestPost(context) {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt }
             ],
-            temperature: 0.5 // Lower temperature for translation accuracy
+            temperature: 0.5
         });
 
         let textData = '';
@@ -193,7 +198,6 @@ export async function onRequestPost(context) {
             textData = JSON.stringify(aiResponse);
         }
 
-        // 텍스트를 줄 단위로 분리하여 퀴즈 객체로 변환
         const lines = textData.split('\n').filter(line => line.includes('|'));
         const quizData = [];
 
@@ -203,8 +207,6 @@ export async function onRequestPost(context) {
                 const question = parts[0];
                 const correct = parts[1];
                 const wrongs = parts.slice(2, 5);
-                
-                // 정답과 오답을 섞어서 answers 배열 생성
                 const answers = [correct, ...wrongs].sort(() => Math.random() - 0.5);
 
                 quizData.push({
@@ -216,13 +218,18 @@ export async function onRequestPost(context) {
         }
 
         if (quizData.length === 0) {
-            // Fallback for parsing failure
             console.error("AI Output Parsing Failed:", textData);
             throw new Error("Failed to parse AI output");
         }
 
+        console.log(`Quiz generated successfully using mode: ${promptMode}`);
+
         return new Response(JSON.stringify(quizData), {
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-Quiz-Source': promptMode,
+                'X-Debug-Log': JSON.stringify(debugLog) 
+            },
         });
 
     } catch (e) {

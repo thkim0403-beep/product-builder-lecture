@@ -112,8 +112,149 @@ const TOPICS = [
 ];
 
 // --- Initialization ---
-function initTopicSelection() {
-    // ... (rest of the logic) ...
+function initApp() {
+    initStaticEventListeners();
+    renderTopics();
+    initTopicScreenListeners();
+    updateLanguageUI();
+    
+    // Ensure visual state matches initial 'ko' state
+    const koBtn = document.querySelector('.lang-btn[data-lang="ko"]');
+    if(koBtn) {
+        const allBtns = document.querySelectorAll('.lang-btn');
+        allBtns.forEach(b => {
+            b.classList.remove('ring-2', 'ring-yellow-400', 'scale-105');
+            b.style.opacity = '0.6';
+        });
+        koBtn.classList.add('ring-2', 'ring-yellow-400', 'scale-105');
+        koBtn.style.opacity = '1';
+    }
+}
+
+function initStaticEventListeners() {
+    // Language Buttons (Static)
+    const langBtns = document.querySelectorAll('.lang-btn');
+    langBtns.forEach(btn => {
+        // Clone to remove old listeners (simple way to avoid duplicates)
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', () => {
+            currentLanguage = newBtn.dataset.lang;
+            updateLanguageUI();
+            
+            // Visual feedback
+            const allBtns = document.querySelectorAll('.lang-btn');
+            allBtns.forEach(b => {
+                b.classList.remove('ring-2', 'ring-yellow-400', 'scale-105');
+                b.style.opacity = '0.6';
+            });
+            newBtn.classList.add('ring-2', 'ring-yellow-400', 'scale-105');
+            newBtn.style.opacity = '1';
+        });
+    });
+
+    // Navigation Buttons
+    if(soloModeBtn) soloModeBtn.onclick = () => {
+        modeSelection.classList.add('hidden');
+        topicSelection.classList.remove('hidden');
+    };
+
+    if(battleModeBtn) battleModeBtn.onclick = () => {
+        modeSelection.classList.add('hidden');
+        battleSetup.classList.remove('hidden');
+    };
+
+    // Back Buttons
+    if (backToMenuFromBattle) backToMenuFromBattle.onclick = resetToMainMenu;
+    if (quitBattleBtn) quitBattleBtn.onclick = resetToMainMenu;
+    if (backToMenuBtn) backToMenuBtn.onclick = resetToMainMenu;
+
+    // Battle Join
+    if (joinRoomBtn) joinRoomBtn.onclick = () => {
+        const roomId = roomIdInput.value.trim();
+        if (roomId) joinBattleRoom(roomId);
+        else alert("Please enter a Room ID");
+    };
+    
+    // Play Again
+    if (playAgainBtn) playAgainBtn.onclick = () => {
+        endScreen.classList.add('hidden');
+        topicSelection.classList.remove('hidden');
+    };
+
+    // Save Score
+    if (saveScoreBtn) saveScoreBtn.onclick = async () => {
+        const name = playerNameInput.value.trim().toUpperCase();
+        if (!name) return alert("ENTER NAME");
+        if (!db) return alert("DB NOT CONNECTED");
+    
+        saveScoreBtn.disabled = true;
+        try {
+            await db.collection("scores").add({ name, score, date: new Date() });
+            saveScoreSection.classList.add('hidden');
+            fetchAndDisplayLeaderboard();
+        } catch (e) { 
+            console.error(e);
+            alert("Failed to save score");
+            saveScoreBtn.disabled = false;
+        }
+    };
+
+    // Share
+    if (shareImgBtn) shareImgBtn.onclick = async () => {
+        try {
+            const element = document.getElementById('end-screen');
+            const canvas = await html2canvas(element, { backgroundColor: '#111827', scale: 2 });
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            if (navigator.share) {
+                const blob = await (await fetch(dataUrl)).blob();
+                const file = new File([blob], 'quiz-result.png', { type: 'image/png' });
+                await navigator.share({
+                    title: 'AI QUIZ BATTLE',
+                    text: `I scored ${score} points! #AIQuizBattle`,
+                    files: [file]
+                });
+            } else {
+                const link = document.createElement('a');
+                link.download = `quiz-result-${Date.now()}.png`;
+                link.href = dataUrl;
+                link.click();
+            }
+        } catch (e) {
+            console.error("Share failed", e);
+            alert("Image share failed. Please try a screenshot.");
+        }
+    };
+}
+
+function initTopicScreenListeners() {
+    // Difficulty Buttons
+    const difficultyBtns = document.querySelectorAll('.difficulty-btn');
+    difficultyBtns.forEach(btn => {
+        btn.onclick = () => {
+            currentDifficulty = btn.dataset.level;
+            difficultyBtns.forEach(b => {
+                b.classList.remove('ring-4', 'ring-yellow-400', 'scale-110');
+                b.style.opacity = '0.6';
+            });
+            btn.classList.add('ring-4', 'ring-yellow-400', 'scale-110');
+            btn.style.opacity = '1';
+        };
+        
+        // Initial Visual State
+        if(btn.dataset.level === currentDifficulty) {
+             btn.classList.add('ring-4', 'ring-yellow-400', 'scale-110');
+             btn.style.opacity = '1';
+        } else {
+             btn.style.opacity = '0.6';
+        }
+    });
+
+    // Back Button inside Topic Selection
+    const backBtn = document.getElementById('back-to-menu-from-topic');
+    if(backBtn) backBtn.onclick = resetToMainMenu;
 }
 
 function renderTopics() {
@@ -127,7 +268,7 @@ function renderTopics() {
         btn.innerHTML = `<div class="text-3xl mb-2">${displayIcon}</div><div class="text-sm">${displayName}</div>`;
         btn.className = "bg-gray-800 hover:bg-gray-700 text-white p-6 rounded-xl border-2 border-transparent hover:border-blue-500 transition-all flex flex-col items-center justify-center";
         btn.style.fontFamily = "'Press Start 2P', cursive";
-        btn.addEventListener('click', () => fetchQuiz(topic.id)); // Send unique ID (history, science, etc.)
+        btn.addEventListener('click', () => fetchQuiz(topic.id)); 
         topicsGrid.appendChild(btn);
     });
 }
@@ -135,28 +276,38 @@ function renderTopics() {
 function updateLanguageUI() {
     const t = TRANSLATIONS[currentLanguage];
     
-    // Update simple text elements
     if(soloModeBtn) soloModeBtn.innerText = t.soloMode;
     if(battleModeBtn) battleModeBtn.innerText = t.battleMode;
-    document.querySelector('#topic-selection h2').innerText = t.chooseTopic;
-    if(backToMenuFromTopic) backToMenuFromTopic.innerText = t.backToMenu;
+    
+    const topicTitle = document.querySelector('#topic-selection h2');
+    if(topicTitle) topicTitle.innerText = t.chooseTopic;
+    
+    // We need to re-select this button as it might have been recreated
+    const backToMenuFromTopicDynamic = document.getElementById('back-to-menu-from-topic');
+    if(backToMenuFromTopicDynamic) backToMenuFromTopicDynamic.innerText = t.backToMenu;
+    
     if(backToMenuFromBattle) backToMenuFromBattle.innerText = t.backToMenu;
     if(quitBattleBtn) quitBattleBtn.innerText = t.quitBattle;
     if(backToMenuBtn) backToMenuBtn.innerText = t.quitGame;
-    document.querySelector('#end-screen h2').innerText = t.gameOver;
-    document.querySelector('#end-screen p').innerHTML = `${t.finalScore}: <span id="final-score" class="text-green-400">${score}</span>`;
+    
+    const endTitle = document.querySelector('#end-screen h2');
+    if(endTitle) endTitle.innerText = t.gameOver;
+    
+    const endScoreP = document.querySelector('#end-screen p');
+    if(endScoreP) endScoreP.innerHTML = `${t.finalScore}: <span id="final-score" class="text-green-400">${score}</span>`;
+    
     if(saveScoreBtn) saveScoreBtn.innerText = t.save;
     if(playAgainBtn) playAgainBtn.innerText = t.playAgain;
     if(shareImgBtn) shareImgBtn.innerText = t.share;
-    document.querySelector('#leaderboard-section h3').innerText = t.topRanking;
-    document.querySelector('#ai-review-section h3 span:last-child').innerText = t.aiReview;
+    
+    const lbTitle = document.getElementById('leaderboard-title');
+    if(lbTitle) lbTitle.innerText = t.topRanking;
+    
+    const aiTitle = document.getElementById('ai-review-title');
+    if(aiTitle) aiTitle.innerText = t.aiReview;
 
     renderTopics();
 }
-
-initTopicSelection();
-// Call updateLanguageUI once to set initial text
-updateLanguageUI();
 
 // --- Firebase Initialization ---
 try {
@@ -186,85 +337,11 @@ function resetToMainMenu() {
     }
 }
 
-// --- Event Listeners ---
-soloModeBtn.addEventListener('click', () => {
-    modeSelection.classList.add('hidden');
-    topicSelection.classList.remove('hidden');
-});
-
-battleModeBtn.addEventListener('click', () => {
-    modeSelection.classList.add('hidden');
-    battleSetup.classList.remove('hidden');
-});
-
-// Back Buttons
-if (backToMenuFromTopic) backToMenuFromTopic.addEventListener('click', resetToMainMenu);
-if (backToMenuFromBattle) backToMenuFromBattle.addEventListener('click', resetToMainMenu);
-if (quitBattleBtn) quitBattleBtn.addEventListener('click', resetToMainMenu);
-if (backToMenuBtn) backToMenuBtn.addEventListener('click', resetToMainMenu); // Quit Game button
-
-joinRoomBtn.addEventListener('click', () => {
-    const roomId = roomIdInput.value.trim();
-    if (roomId) joinBattleRoom(roomId);
-    else alert("Please enter a Room ID");
-});
-
-playAgainBtn.addEventListener('click', () => {
-    endScreen.classList.add('hidden');
-    topicSelection.classList.remove('hidden'); // Go back to topic selection
-});
-
-saveScoreBtn.addEventListener('click', async () => {
-    const name = playerNameInput.value.trim().toUpperCase();
-    if (!name) return alert("ENTER NAME");
-    if (!db) return alert("DB NOT CONNECTED");
-
-    saveScoreBtn.disabled = true;
-    try {
-        await db.collection("scores").add({ name, score, date: new Date() });
-        saveScoreSection.classList.add('hidden');
-        fetchAndDisplayLeaderboard();
-    } catch (e) { 
-        console.error(e);
-        alert("Failed to save score");
-        saveScoreBtn.disabled = false;
-    }
-});
-
-shareImgBtn.addEventListener('click', async () => {
-    try {
-        const element = document.getElementById('end-screen');
-        const canvas = await html2canvas(element, { backgroundColor: '#111827', scale: 2 });
-        const dataUrl = canvas.toDataURL('image/png');
-        
-        // Mobile Share API
-        if (navigator.share) {
-            const blob = await (await fetch(dataUrl)).blob();
-            const file = new File([blob], 'quiz-result.png', { type: 'image/png' });
-            await navigator.share({
-                title: 'AI QUIZ BATTLE',
-                text: `I scored ${score} points! #AIQuizBattle`,
-                files: [file]
-            });
-        } else {
-            // Desktop Download
-            const link = document.createElement('a');
-            link.download = `quiz-result-${Date.now()}.png`;
-            link.href = dataUrl;
-            link.click();
-        }
-    } catch (e) {
-        console.error("Share failed", e);
-        alert("Image share failed. Please try a screenshot.");
-    }
-});
-
 // --- Solo Game Logic ---
 async function fetchQuiz(topicId) {
     const originalContent = topicSelection.innerHTML;
     const t = TRANSLATIONS[currentLanguage];
     
-    // Display name logic for loading screen
     const topicObj = TOPICS.find(tp => tp.id === topicId);
     const displayTopic = currentLanguage === 'ko' ? topicObj.name : topicObj.nameEn;
 
@@ -275,32 +352,41 @@ async function fetchQuiz(topicId) {
         </div>`;
 
     try {
+        const payload = { topic: topicId, difficulty: currentDifficulty, lang: currentLanguage };
+        console.log("Sending Request:", payload); // Debug Log
+
         const response = await fetch('/api/generate-quiz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: topicId, difficulty: currentDifficulty, lang: currentLanguage })
+            body: JSON.stringify(payload)
         });
+        
+        // Debug: Show server logs
+        const debugInfo = response.headers.get('X-Debug-Log');
+        if (debugInfo) {
+            console.log("Server Debug Log:", JSON.parse(debugInfo));
+            // alert("Server Debug: " + debugInfo); // Uncomment to see alert
+        }
         
         if (!response.ok) throw new Error("API Error");
         
         const data = await response.json();
-        currentQuizData = (Array.isArray(data) && data.length > 0) ? data : getMockQuizData(topic);
+        currentQuizData = (Array.isArray(data) && data.length > 0) ? data : getMockQuizData(topicId);
         
         topicSelection.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         startSoloGame();
     } catch (e) {
         console.warn("Using mock data due to error", e);
-        // Fallback to mock data immediately
-        currentQuizData = getMockQuizData(topic);
+        currentQuizData = getMockQuizData(topicId);
         topicSelection.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         startSoloGame();
     } finally {
-        // Restore UI for next time
         setTimeout(() => {
             topicSelection.innerHTML = originalContent;
-            initTopicSelection();
+            renderTopics();
+            initTopicScreenListeners(); 
         }, 500);
     }
 }
@@ -311,7 +397,6 @@ function startSoloGame() {
     wrongAnswers = [];
     endScreen.classList.add('hidden');
     
-    // Reset UI
     saveScoreSection.classList.remove('hidden');
     leaderboardSection.classList.add('hidden');
     aiReviewSection.classList.add('hidden');
@@ -332,9 +417,6 @@ function displayQuestion() {
     
     answersContainer.innerHTML = '';
     
-    // Randomize answers order if you want, but AI usually gives them fixed.
-    // Let's keep AI order for now or shuffle if needed.
-    
     q.answers.forEach(a => {
         const btn = document.createElement('button');
         btn.innerText = a;
@@ -350,22 +432,18 @@ function handleAnswer(selected, question) {
     
     if (isCorrect) {
         score += 10;
-        // Optional: Green flash on correct
     } else {
         wrongAnswers.push(question);
-        // Optional: Red flash on wrong
     }
     
     // --- Record Statistics (Fire & Forget) ---
     if (db) {
-        // Create a safe ID from the question text (remove special chars, limit length)
         const safeId = question.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
-        
         const statsRef = db.collection("question_stats").doc(safeId);
         
         statsRef.set({
             question: question.question,
-            topic: question.topic || "Unknown", // Assuming topic is passed in question object or accessible
+            topic: question.topic || "Unknown",
             lastPlayed: new Date()
         }, { merge: true });
 
@@ -373,7 +451,7 @@ function handleAnswer(selected, question) {
             totalAttempts: firebase.firestore.FieldValue.increment(1),
             correctCount: firebase.firestore.FieldValue.increment(isCorrect ? 1 : 0),
             wrongCount: firebase.firestore.FieldValue.increment(isCorrect ? 0 : 1)
-        }).catch(e => console.log("Stats update failed (might be first time):", e));
+        }).catch(e => console.log("Stats update failed:", e));
     }
 
     currentQuestionIndex++;
@@ -418,21 +496,17 @@ function joinBattleRoom(roomId) {
     battleSetup.classList.add('hidden');
     battleScreen.classList.remove('hidden');
     
-    // Reset visual
     playerBar.style.width = '50%';
     opponentBar.style.width = '50%';
     battleStatus.innerText = "JOINING...";
 
-    // Register Player
     rtdb.ref(`rooms/${roomId}/players/${myPlayerId}`).set({ 
         score: 0,
         lastActive: firebase.database.ServerValue.TIMESTAMP
     });
     
-    // Use generic battle questions (or fetch from AI in future)
     currentQuizData = getMockQuizData("BATTLE");
     
-    // Listen for updates
     rtdb.ref(`rooms/${roomId}`).on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data || !data.players) return;
@@ -444,8 +518,6 @@ function joinBattleRoom(roomId) {
         let oppScore = 0;
         
         if (players[myPlayerId]) myScore = players[myPlayerId].score || 0;
-        
-        // Find opponent (anyone who is not me)
         const opponentId = playerIds.find(id => id !== myPlayerId);
         if (opponentId) oppScore = players[opponentId].score || 0;
         
@@ -468,14 +540,8 @@ function joinBattleRoom(roomId) {
 }
 
 function updateBattleBars(myS, oppS) {
-    // Determine advantage
-    // If scores are equal => 50%
-    // If I have 10 more => 60%?
-    // Let's say max diff of 50 points swings the bar fully
     const diff = myS - oppS;
-    let myPercent = 50 + diff; // 1 point = 1% shift
-    
-    // Clamp
+    let myPercent = 50 + diff;
     myPercent = Math.max(5, Math.min(95, myPercent));
     
     anime({ targets: '#player-bar', width: `${myPercent}%`, duration: 500, easing: 'easeOutQuad' });
@@ -483,9 +549,7 @@ function updateBattleBars(myS, oppS) {
 }
 
 function displayBattleQuestion(i) {
-    // Infinite loop for battle
     const q = currentQuizData[i % currentQuizData.length];
-    
     battleQuestionText.innerText = q.question;
     battleAnswersContainer.innerHTML = '';
     
@@ -496,10 +560,8 @@ function displayBattleQuestion(i) {
         btn.style.fontFamily = "'Press Start 2P', cursive";
         btn.onclick = () => {
             if (a === q.correct) {
-                // +10 points
                  rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}/score`).transaction(s => (s || 0) + 10);
             } else {
-                // -5 points (penalty)
                  rtdb.ref(`rooms/${currentRoomId}/players/${myPlayerId}/score`).transaction(s => Math.max(0, (s || 0) - 5));
             }
             displayBattleQuestion(i + 1);
@@ -539,32 +601,17 @@ function fetchAndDisplayLeaderboard() {
 }
 
 function getMockQuizData(topic) {
-    // Fallback questions in case AI fails
-    if (topic === "한국사") {
+    if (topic === "history") {
         return [
             { question: "조선의 제1대 왕은 누구인가요?", answers: ["태조 이성계", "세종대왕", "정조", "연산군"], correct: "태조 이성계" },
             { question: "임진왜란이 일어난 해는?", answers: ["1392년", "1592년", "1910년", "1950년"], correct: "1592년" },
             { question: "훈민정음을 창제한 왕은?", answers: ["영조", "태종", "세종대왕", "고종"], correct: "세종대왕" }
         ];
     }
-    if (topic === "과학") {
-        return [
-            { question: "물의 화학식은?", answers: ["CO2", "H2O", "O2", "NaCl"], correct: "H2O" },
-            { question: "태양계에서 가장 큰 행성은?", answers: ["지구", "화성", "목성", "토성"], correct: "목성" },
-            { question: "만유인력의 법칙을 발견한 사람은?", answers: ["뉴턴", "아인슈타인", "갈릴레이", "에디슨"], correct: "뉴턴" }
-        ];
-    }
-    if (topic === "스포츠") {
-        return [
-            { question: "손흥민 선수의 소속팀은? (2024 기준)", answers: ["토트넘", "맨유", "첼시", "리버풀"], correct: "토트넘" },
-            { question: "야구는 몇 명이서 하는 게임인가요?", answers: ["9명", "11명", "5명", "7명"], correct: "9명" },
-            { question: "월드컵은 몇 년마다 열리나요?", answers: ["2년", "3년", "4년", "5년"], correct: "4년" }
-        ];
-    }
-    // Default generic questions for other topics
     return [
-        { question: `${topic} 분야의 기초 문제입니다. 정답은 1번입니다.`, answers: ["정답", "오답", "오답", "오답"], correct: "정답" },
-        { question: `${topic} 퀴즈가 AI 연결 문제로 대체되었습니다.`, answers: ["확인", "취소", "모름", "글쎄요"], correct: "확인" },
-        { question: "다음 중 해당 주제와 관련 없는 것은?", answers: ["관련 없음", "관련 있음", "관련 있음", "관련 있음"], correct: "관련 없음" }
+        { question: `Mock Question for ${topic}`, answers: ["A", "B", "C", "D"], correct: "A" }
     ];
 }
+
+// Start the app
+initApp();

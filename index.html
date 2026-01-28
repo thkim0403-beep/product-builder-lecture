@@ -20,9 +20,9 @@
         <h1 class="text-3xl md:text-5xl font-bold mb-4 text-yellow-400 drop-shadow-md" style="font-family: 'Press Start 2P', cursive;">AI QUIZ BATTLE</h1>
         
         <!-- Language Selection -->
-        <div id="lang-selection" class="flex justify-center gap-4 mb-12">
-            <button class="lang-btn px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold border border-gray-500 text-gray-300 transition-all opacity-100 ring-2 ring-yellow-400 scale-105" data-lang="ko">🇰🇷 KOREAN</button>
-            <button class="lang-btn px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-bold border border-gray-500 text-gray-300 transition-all opacity-60" data-lang="en">🇺🇸 ENGLISH</button>
+        <div id="lang-selection" class="flex justify-center gap-4 mb-12 font-sans">
+            <button class="lang-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm md:text-base font-bold border border-gray-500 text-gray-300 transition-all opacity-100 ring-2 ring-yellow-400 scale-105" data-lang="ko">🇰🇷 한국어</button>
+            <button class="lang-btn px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm md:text-base font-bold border border-gray-500 text-gray-300 transition-all opacity-60" data-lang="en">🇺🇸 ENGLISH</button>
         </div>
 
         <!-- Mode Selection -->
@@ -119,7 +119,7 @@
             <!-- AI Explanation Section -->
             <div id="ai-review-section" class="hidden mb-8 text-left bg-gray-800 p-6 rounded-lg border border-blue-500/50">
                 <h3 class="text-lg text-blue-400 mb-4 flex items-center gap-2" style="font-family: 'Press Start 2P', cursive;">
-                    <span>🤖</span> AI REVIEW
+                    <span>🤖</span> <span id="ai-review-title">AI REVIEW</span>
                 </h3>
                 <div id="ai-explanation-text" class="text-sm leading-relaxed space-y-4 text-gray-300 font-sans">
                     <!-- AI explanation will be injected here -->
@@ -133,7 +133,7 @@
             </div>
 
             <div id="leaderboard-section" class="hidden mb-10">
-                <h3 class="text-xl text-yellow-400 mb-6" style="font-family: 'Press Start 2P', cursive;">TOP 10 RANKING</h3>
+                <h3 class="text-xl text-yellow-400 mb-6" style="font-family: 'Press Start 2P', cursive;"><span id="leaderboard-title">TOP 10 RANKING</span></h3>
                 <ul id="leaderboard-list" class="text-left bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-3 font-mono text-sm max-h-60 overflow-y-auto">
                     <!-- Leaderboard items -->
                 </ul>
