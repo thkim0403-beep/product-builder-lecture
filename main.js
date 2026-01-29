@@ -441,10 +441,33 @@ function displayQuestion() {
 function handleAnswer(selected, question) {
     const isCorrect = selected === question.correct;
     
+    console.log(`[DEBUG] Answered: "${selected}" | Correct: "${question.correct}" | Result: ${isCorrect ? 'PASS' : 'FAIL'}`);
+
     if (isCorrect) {
         score += 10;
+        // Visual Feedback: Green
+        const buttons = answersContainer.getElementsByTagName('button');
+        for (let btn of buttons) {
+            if (btn.innerText === selected) {
+                btn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                btn.classList.add('bg-green-600');
+            }
+        }
     } else {
         wrongAnswers.push(question);
+        // Visual Feedback: Red
+        const buttons = answersContainer.getElementsByTagName('button');
+        for (let btn of buttons) {
+            if (btn.innerText === selected) {
+                btn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                btn.classList.add('bg-red-600');
+            }
+            // Show correct one as well
+            if (btn.innerText === question.correct) {
+                btn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                btn.classList.add('bg-green-600', 'ring-2', 'ring-white');
+            }
+        }
     }
     
     // --- Record Statistics (Fire & Forget) ---
@@ -465,9 +488,12 @@ function handleAnswer(selected, question) {
         }).catch(e => console.log("Stats update failed:", e));
     }
 
-    currentQuestionIndex++;
-    updateScore();
-    displayQuestion();
+    // Delay next question slightly to show feedback
+    setTimeout(() => {
+        currentQuestionIndex++;
+        updateScore();
+        displayQuestion();
+    }, 1000);
 }
 
 function updateScore() { scoreEl.innerText = score; }
@@ -476,6 +502,7 @@ async function showEndScreen() {
     gameScreen.classList.add('hidden');
     endScreen.classList.remove('hidden');
     finalScoreEl.innerText = score;
+    console.log(`[DEBUG] Final Score: ${score} | Wrong Answers: ${wrongAnswers.length}`);
     
     if (wrongAnswers.length > 0) {
         aiReviewSection.classList.remove('hidden');
@@ -491,11 +518,18 @@ async function showEndScreen() {
                 const data = await res.json();
                 aiExplanationText.innerText = data.explanation;
             } else {
-                aiExplanationText.innerText = "COULD NOT LOAD EXPLANATION.";
+                const errText = await res.text();
+                console.error("[DEBUG] Explain API Error:", errText);
+                aiExplanationText.innerText = `ERROR: ${res.status} - ${errText.slice(0, 50)}`;
             }
         } catch (e) { 
-            aiExplanationText.innerText = "AI CONNECTION FAILED."; 
+            console.error("[DEBUG] Explain Fetch Failed:", e);
+            aiExplanationText.innerText = `CONNECTION FAILED: ${e.message}`; 
         }
+    } else {
+        // Perfect Score
+        aiReviewSection.classList.remove('hidden');
+        aiExplanationText.innerText = currentLanguage === 'ko' ? "완벽합니다! 모든 문제를 맞히셨습니다. 🎉" : "Perfect! You got everything right. 🎉";
     }
 }
 
