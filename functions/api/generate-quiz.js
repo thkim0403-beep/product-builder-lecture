@@ -261,9 +261,9 @@ Wrongs: ${q.incorrect_answers.join(', ')}`;
 
         return new Response(JSON.stringify(quizData), {
             headers: { 
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json; charset=utf-8',
                 'X-Quiz-Source': promptMode,
-                'X-Debug-Log': JSON.stringify(debugLog) 
+                'X-Debug-Log': btoa(unescape(encodeURIComponent(JSON.stringify(debugLog)))) 
             },
         });
 

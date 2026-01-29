@@ -70,7 +70,7 @@ export async function onRequestPost(context) {
         }
 
         return new Response(JSON.stringify({ explanation }), {
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
         });
 
     } catch (e) {
