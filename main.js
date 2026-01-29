@@ -348,15 +348,45 @@ async function fetchQuiz(topicId) {
     const loadingScreen = document.getElementById('loading-screen');
     const loadingText = document.getElementById('loading-text');
     
-    // Display name logic for loading screen
     const topicObj = TOPICS.find(tp => tp.id === topicId);
     const displayTopic = currentLanguage === 'ko' ? topicObj.name : topicObj.nameEn;
 
-    // Show Loading
     topicSelection.classList.add('hidden');
     loadingScreen.classList.remove('hidden');
     if(loadingText) loadingText.innerHTML = `${t.generating}<br>${displayTopic}`;
 
+    // [STEP 1] Hybrid Caching: Try Firestore First
+    try {
+        if (db) {
+            console.log(`[CACHE] Checking DB for topic: ${topicId}`);
+            // Fetch potential questions from DB (Limit 20 to shuffle)
+            const snapshot = await db.collection('quiz_bank')
+                .where('topic', '==', topicId)
+                .where('lang', '==', currentLanguage)
+                .where('difficulty', '==', currentDifficulty)
+                .limit(30) 
+                .get();
+
+            if (!snapshot.empty && snapshot.size >= 10) {
+                console.log(`[CACHE] HIT! Found ${snapshot.size} questions.`);
+                const cachedData = [];
+                snapshot.forEach(doc => cachedData.push(doc.data()));
+                
+                // Shuffle and pick 10
+                currentQuizData = cachedData.sort(() => Math.random() - 0.5).slice(0, 10);
+                
+                loadingScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+                startSoloGame();
+                return; // Exit early, no API call needed!
+            }
+            console.log("[CACHE] MISS. Not enough questions. Calling AI...");
+        }
+    } catch (e) {
+        console.warn("[CACHE] Error checking DB:", e);
+    }
+
+    // [STEP 2] Fallback to AI API
     try {
         const payload = { topic: topicId, difficulty: currentDifficulty, lang: currentLanguage };
         console.log("Sending Request:", payload);
@@ -367,17 +397,13 @@ async function fetchQuiz(topicId) {
             body: JSON.stringify(payload)
         });
         
+        // Debug Header Logic...
         const debugInfo = response.headers.get('X-Debug-Log');
         if (debugInfo) {
             try {
-                // Decode Base64 (Server sends: btoa(unescape(encodeURIComponent(JSON.stringify(debugLog)))))
                 const decodedDebug = decodeURIComponent(escape(atob(debugInfo)));
                 console.log("Server Debug Log:", JSON.parse(decodedDebug));
-            } catch (e) {
-                console.warn("Failed to parse debug log:", e);
-                // Fallback for old cached versions or errors
-                console.log("Raw Debug Header:", debugInfo);
-            }
+            } catch (e) { console.warn("Failed to parse debug log"); }
         }
         
         if (!response.ok) throw new Error("API Error");
@@ -385,9 +411,32 @@ async function fetchQuiz(topicId) {
         const data = await response.json();
         currentQuizData = (Array.isArray(data) && data.length > 0) ? data : getMockQuizData(topicId);
         
-        loadingScreen.classList.add('hidden'); // Hide loading
-        gameScreen.classList.remove('hidden'); // Show game
+        // [STEP 3] Auto-Save to Cache (Crowdsourcing)
+        if (db && Array.isArray(data) && data.length > 0) {
+            const batch = db.batch();
+            let saveCount = 0;
+            
+            data.forEach(q => {
+                // Use safe ID to prevent duplicates
+                const safeId = q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
+                const docRef = db.collection('quiz_bank').doc(safeId);
+                batch.set(docRef, {
+                    ...q,
+                    topic: topicId,
+                    difficulty: currentDifficulty,
+                    lang: currentLanguage,
+                    createdAt: new Date()
+                });
+                saveCount++;
+            });
+            
+            batch.commit().then(() => console.log(`[CACHE] Saved ${saveCount} new questions to DB`));
+        }
+
+        loadingScreen.classList.add('hidden'); 
+        gameScreen.classList.remove('hidden'); 
         startSoloGame();
+
     } catch (e) {
         console.warn("Using mock data due to error", e);
         currentQuizData = getMockQuizData(topicId);
