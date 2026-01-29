@@ -3,3 +3,15 @@ node_modules
 .DS_Store
 firebase-debug.log
 .idx/
+
+# Wrangler / Cloudflare
+.wrangler/
+.mapbox/
+wrangler.log
+wrangler_*.log
+
+# Testing
+test-results/
+playwright-report/
+blob-report/
+

@@ -4,8 +4,10 @@ export async function onRequestPost(context) {
     try {
         const { topic, difficulty = 'Mixed', lang = 'ko' } = await request.json();
 
+        let aiAvailable = true;
         if (!env.AI) {
-            return new Response(JSON.stringify({ error: "AI Binding Missing" }), { status: 500 });
+            console.warn("AI Binding Missing - Using Mock Data");
+            aiAvailable = false;
         }
 
         // Standardized Topic Keys to Open Trivia Category IDs
@@ -183,13 +185,46 @@ Wrongs: ${q.incorrect_answers.join(', ')}`;
             }
         }
 
-        const aiResponse = await env.AI.run(model, {
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ],
-            temperature: 0.5
-        });
+        let aiResponse;
+        if (aiAvailable) {
+            aiResponse = await env.AI.run(model, {
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.5
+            });
+        } else {
+            // Mock AI Response for Local Testing
+            aiResponse = {
+                response: `
+                한국어 테스트 문제 1|정답|오답1|오답2|오답3
+                한국어 테스트 문제 2|정답|오답1|오답2|오답3
+                한국어 테스트 문제 3|정답|오답1|오답2|오답3
+                한국어 테스트 문제 4|정답|오답1|오답2|오답3
+                한국어 테스트 문제 5|정답|오답1|오답2|오답3
+                한국어 테스트 문제 6|정답|오답1|오답2|오답3
+                한국어 테스트 문제 7|정답|오답1|오답2|오답3
+                한국어 테스트 문제 8|정답|오답1|오답2|오답3
+                한국어 테스트 문제 9|정답|오답1|오답2|오답3
+                한국어 테스트 문제 10|정답|오답1|오답2|오답3
+                `
+            };
+            if (lang === 'en') {
+                aiResponse.response = `
+                English Test Question 1|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 2|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 3|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 4|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 5|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 6|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 7|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 8|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 9|Correct|Wrong1|Wrong2|Wrong3
+                English Test Question 10|Correct|Wrong1|Wrong2|Wrong3
+                `;
+            }
+        }
 
         let textData = '';
         if (aiResponse && aiResponse.response) {
