@@ -368,7 +368,17 @@ async function fetchQuiz(topicId) {
         });
         
         const debugInfo = response.headers.get('X-Debug-Log');
-        if (debugInfo) console.log("Server Debug Log:", JSON.parse(debugInfo));
+        if (debugInfo) {
+            try {
+                // Decode Base64 (Server sends: btoa(unescape(encodeURIComponent(JSON.stringify(debugLog)))))
+                const decodedDebug = decodeURIComponent(escape(atob(debugInfo)));
+                console.log("Server Debug Log:", JSON.parse(decodedDebug));
+            } catch (e) {
+                console.warn("Failed to parse debug log:", e);
+                // Fallback for old cached versions or errors
+                console.log("Raw Debug Header:", debugInfo);
+            }
+        }
         
         if (!response.ok) throw new Error("API Error");
         
