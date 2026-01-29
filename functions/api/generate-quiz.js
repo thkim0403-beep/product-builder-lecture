@@ -274,11 +274,22 @@ Wrongs: ${q.incorrect_answers.join(', ')}`;
 
         console.log(`Quiz generated successfully using mode: ${promptMode}`);
 
+        let encodedDebug = "";
+        try {
+            // Safer Base64 Encoding for UTF-8
+            const utf8Bytes = new TextEncoder().encode(JSON.stringify(debugLog));
+            const binString = Array.from(utf8Bytes, (byte) => String.fromCharCode(byte)).join("");
+            encodedDebug = btoa(binString);
+        } catch (e) {
+            console.error("Debug Log Encoding Failed:", e);
+            encodedDebug = btoa("EncodingError");
+        }
+
         return new Response(JSON.stringify(quizData), {
             headers: { 
                 'Content-Type': 'application/json; charset=utf-8',
                 'X-Quiz-Source': promptMode,
-                'X-Debug-Log': btoa(unescape(encodeURIComponent(JSON.stringify(debugLog)))) 
+                'X-Debug-Log': encodedDebug
             },
         });
 
