@@ -438,6 +438,54 @@ function displayQuestion() {
     });
 }
 
+// --- Audio System (Web Audio API) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    if (type === 'correct') {
+        // High pitched 'Ding'
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+        osc.frequency.exponentialRampToValueAtTime(1046.5, audioCtx.currentTime + 0.1); // C6
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'wrong') {
+        // Low pitched 'Buzz'
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'win') {
+        // Victory Fanfare
+        const now = audioCtx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.type = 'triangle';
+            o.frequency.value = freq;
+            g.gain.setValueAtTime(0.2, now + i*0.1);
+            g.gain.exponentialRampToValueAtTime(0.01, now + i*0.1 + 0.4);
+            o.start(now + i*0.1);
+            o.stop(now + i*0.1 + 0.4);
+        });
+    }
+}
+
 function handleAnswer(selected, question) {
     const isCorrect = selected === question.correct;
     
@@ -445,6 +493,7 @@ function handleAnswer(selected, question) {
 
     if (isCorrect) {
         score += 10;
+        playSound('correct'); // Sound Effect
         // Visual Feedback: Green
         const buttons = answersContainer.getElementsByTagName('button');
         for (let btn of buttons) {
@@ -455,6 +504,7 @@ function handleAnswer(selected, question) {
         }
     } else {
         wrongAnswers.push(question);
+        playSound('wrong'); // Sound Effect
         // Visual Feedback: Red
         const buttons = answersContainer.getElementsByTagName('button');
         for (let btn of buttons) {
@@ -504,6 +554,16 @@ async function showEndScreen() {
     finalScoreEl.innerText = score;
     console.log(`[DEBUG] Final Score: ${score} | Wrong Answers: ${wrongAnswers.length}`);
     
+    // Confetti Effect for High Score
+    if (score >= 70) {
+        playSound('win');
+        confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 }
+        });
+    }
+
     if (wrongAnswers.length > 0) {
         aiReviewSection.classList.remove('hidden');
         aiExplanationText.innerText = "AI IS ANALYZING YOUR MISTAKES...";
