@@ -152,8 +152,8 @@ export async function onRequestPost(context) {
                 2. 인명/지명은 한글 표기 필수.
                 3. 자연스러운 해요체 사용.
                 ${jsonInstruction}`;
-                userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 퀴즈 10개를 JSON으로 만들어주세요.`;
-            }
+            userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 퀴즈 10개를 JSON으로 만들어주세요.`;
+        }
 
         let aiResponse;
         if (aiAvailable) {
