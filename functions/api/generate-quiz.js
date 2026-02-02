@@ -156,21 +156,35 @@ export async function onRequestPost(context) {
         }
 
         let aiResponse;
-        if (aiAvailable) {
-            aiResponse = await env.AI.run(model, {
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.5
-            });
-        } else {
+        if (aiAvailable && env.AI) {
+            try {
+                aiResponse = await env.AI.run(model, {
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    temperature: 0.5
+                });
+            } catch (aiErr) {
+                console.error("AI Run Error:", aiErr);
+                debugLog.push(`AI Error: ${aiErr.message}`);
+                aiAvailable = false; // Fallback to mock
+            }
+        }
+
+        if (!aiAvailable || !env.AI || !aiResponse) {
             // Mock Data (Updated to JSON)
+            debugLog.push("Using Mock Data Fallback");
+            const mockQuestions = [];
+            for(let i=1; i<=10; i++) {
+                mockQuestions.push({
+                    "question": `[Mock] ${topic}에 관한 ${difficulty} 난이도 문제 ${i} (언어: ${lang})`,
+                    "correct": "정답",
+                    "wrong": ["오답1", "오답2", "오답3"]
+                });
+            }
             aiResponse = {
-                response: JSON.stringify([
-                    { "question": "Mock Q1", "correct": "A", "wrong": ["B", "C", "D"] },
-                    { "question": "Mock Q2", "correct": "A", "wrong": ["B", "C", "D"] }
-                ])
+                response: JSON.stringify(mockQuestions)
             };
         }
 
