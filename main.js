@@ -357,7 +357,7 @@ async function fetchQuiz(topicId) {
 
     // [STEP 1] Hybrid Caching: Try Firestore First
     try {
-        if (db) {
+        if (db && !window.BYPASS_CACHE) {
             console.log(`[CACHE] Checking DB for topic: ${topicId}`);
             // Fetch potential questions from DB (Limit 20 to shuffle)
             const snapshot = await db.collection('quiz_bank')

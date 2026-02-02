@@ -154,7 +154,6 @@ export async function onRequestPost(context) {
                 ${jsonInstruction}`;
                 userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 퀴즈 10개를 JSON으로 만들어주세요.`;
             }
-        }
 
         let aiResponse;
         if (aiAvailable) {

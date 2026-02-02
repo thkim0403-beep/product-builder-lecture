@@ -43,17 +43,24 @@ async function runTest() {
         const resKo = await fetch(baseUrl + '/api/generate-quiz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: 'history', difficulty: 'Medium', lang: 'ko' }) // History maps to Naver
+            body: JSON.stringify({ topic: 'science', difficulty: 'Medium', lang: 'ko' }) // Changed to 'science'
         });
         
         const debugKo = resKo.headers.get('x-debug-log');
         console.log(`Status: ${resKo.status}`);
-        console.log(`Debug Log: ${debugKo}`);
+        
+        let decodedKo = "";
+        if (debugKo) {
+            try {
+                decodedKo = decodeURIComponent(escape(atob(debugKo)));
+                console.log(`Debug Log (Decoded): ${decodedKo}`);
+            } catch (e) {
+                console.log(`Debug Log (Raw): ${debugKo}`);
+            }
+        }
         
         if (!resKo.ok) throw new Error("Korean API Request Failed");
-        if (!debugKo || (!debugKo.includes('Naver') && !debugKo.includes('Mock'))) {
-             // If Naver keys are missing, it might use mock or log "Naver Keys Missing"
-             // If we see "Naver" in any form (Success, Error, Keys Missing), the logic was triggered.
+        if (!decodedKo || (!decodedKo.includes('Naver') && !decodedKo.includes('Mock'))) {
              console.warn("⚠️ Warning: Naver API might not have triggered correctly or keys are missing.");
         } else {
              console.log("✅ PASS: Korean logic triggered (Naver trace found).");
@@ -65,15 +72,22 @@ async function runTest() {
         const resEn = await fetch(baseUrl + '/api/generate-quiz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: 'general', difficulty: 'Medium', lang: 'en' }) // General maps to Trivia
+            body: JSON.stringify({ topic: 'general', difficulty: 'Medium', lang: 'en' }) 
         });
 
         const debugEn = resEn.headers.get('x-debug-log');
         console.log(`Status: ${resEn.status}`);
-        console.log(`Debug Log: ${debugEn}`);
+
+        let decodedEn = "";
+        if (debugEn) {
+            try {
+                decodedEn = decodeURIComponent(escape(atob(debugEn)));
+                console.log(`Debug Log (Decoded): ${decodedEn}`);
+            } catch(e) {}
+        }
 
         if (!resEn.ok) throw new Error("English API Request Failed");
-        if (!debugEn || !debugEn.includes('OpenTrivia')) {
+        if (!decodedEn || !decodedEn.includes('OpenTrivia')) {
             throw new Error("❌ FAIL: OpenTrivia API was not triggered for English mode.");
         }
         console.log("✅ PASS: English logic triggered (OpenTrivia trace found).");
