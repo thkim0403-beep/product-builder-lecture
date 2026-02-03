@@ -39,6 +39,34 @@ export async function onRequestPost(context) {
     try {
         const { topic, difficulty = 'Mixed', lang = 'ko' } = await request.json();
 
+        // --- 1. KV CACHE CHECK (Edge Caching) ---
+        // If available, serve instantly from the Edge
+        if (env.QUIZ_CACHE) {
+            const cacheKey = `quiz:${lang}:${topic}:${difficulty}`;
+            try {
+                // Get cached data (array of question batches)
+                const cachedRaw = await env.QUIZ_CACHE.get(cacheKey);
+                if (cachedRaw) {
+                    const cachedData = JSON.parse(cachedRaw);
+                    if (Array.isArray(cachedData) && cachedData.length > 0) {
+                        // Pick a random batch from cache to vary questions slightly if we stored multiple
+                        // For now, we assume simple caching: just return the stored set
+                        // But to make it feel dynamic, we shuffle the result
+                        const shuffled = cachedData.sort(() => Math.random() - 0.5);
+                        
+                        return new Response(JSON.stringify(shuffled), {
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-Quiz-Source': 'KV_CACHE' // Debug header
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn("KV Read Error:", e);
+            }
+        }
+
         let aiAvailable = true;
         if (!env.AI) {
             console.warn("AI Binding Missing - Using Mock Data");
@@ -377,7 +405,20 @@ export async function onRequestPost(context) {
         }
 
         if (quizData.length === 0) {
-            throw new Error("No quiz data generated even after fallback");
+            throw new Error("No quiz data generated");
+        }
+
+        // --- 2. KV CACHE SAVE (Write Back) ---
+        if (env.QUIZ_CACHE) {
+            const cacheKey = `quiz:${lang}:${topic}:${difficulty}`;
+            try {
+                // Cache for 24 hours (86400 seconds)
+                // We overwrite the existing cache with the freshest AI generation
+                // Ideally, we could append to a list, but simple overwrite is fine for "Daily Quiz" concept
+                await env.QUIZ_CACHE.put(cacheKey, JSON.stringify(quizData), { expirationTtl: 86400 });
+            } catch (e) {
+                console.warn("KV Write Error:", e);
+            }
         }
 
         let encodedDebug = "";
