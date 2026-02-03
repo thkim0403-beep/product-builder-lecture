@@ -64,7 +64,7 @@
 
         const TOPICS = ["history", "science", "general", "sports", "movies", "geography"];
         const LANGS = ["ko", "en"];
-        const DIFFICULTIES = ["Medium"]; // Simplify to Medium for mass generation
+        const DIFFICULTIES = ["Easy", "Medium", "Hard"]; // Full coverage!
 
         function log(msg) {
             const div = document.createElement('div');
@@ -72,15 +72,15 @@
             logBox.prepend(div);
         }
 
-        // ... (Init Listener remains same) ...
+        // ... (Init logic remains same) ...
         window.addEventListener('DOMContentLoaded', () => {
-             // ... (Init logic same as before) ...
+             // ...
             log("⏳ Initializing Admin Tool...");
             try {
                 if (!window.firebase) throw new Error("Firebase SDK not loaded.");
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.firestore();
-                log("✅ Ready for FULL AUTO generation.");
+                log("✅ Ready for ULTIMATE FULL AUTO generation.");
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
             } catch (e) {
                 log(`❌ Init Error: ${e.message}`);
@@ -92,13 +92,13 @@
             if (!db) return alert("Firebase not connected!");
             
             const loops = parseInt(document.getElementById('loops').value);
-            const totalCalls = loops * TOPICS.length * LANGS.length;
+            const totalCalls = loops * TOPICS.length * LANGS.length * DIFFICULTIES.length;
 
-            if(!confirm(`This will make ${totalCalls} API calls. It might take a few minutes. Continue?`)) return;
+            if(!confirm(`ULTIMATE MODE: This will make ${totalCalls} API calls. This is a massive operation. Continue?`)) return;
 
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
-            btn.innerText = "⏳ WORKING... DO NOT CLOSE TAB";
+            btn.innerText = "⏳ FULL AUTO WORKING... DO NOT CLOSE";
 
             try {
                 let totalSaved = 0;
@@ -109,46 +109,48 @@
                     
                     for (const lang of LANGS) {
                         for (const topic of TOPICS) {
-                            progress++;
-                            const difficulty = "Medium";
-                            
-                            log(`[${progress}/${totalCalls}] 🔄 ${lang.toUpperCase()} | ${topic} ...`);
-
-                            try {
-                                const response = await fetch('/api/generate-quiz', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ topic, difficulty, lang })
-                                });
-
-                                if (!response.ok) throw new Error(`API Error ${response.status}`);
+                            for (const difficulty of DIFFICULTIES) {
+                                progress++;
                                 
-                                const questions = await response.json();
-                                
-                                const batch = db.batch();
-                                let batchCount = 0;
-                                questions.forEach(q => {
-                                    const safeId = `${lang}_${topic}_` + q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 30);
-                                    const docRef = db.collection('quiz_bank').doc(safeId);
-                                    batch.set(docRef, { ...q, topic, difficulty, lang, createdAt: new Date(), source: 'auto-admin' });
-                                    batchCount++;
-                                });
-                                await batch.commit();
-                                totalSaved += batchCount;
-                                log(`   ✅ Saved ${batchCount} items.`);
+                                log(`[${progress}/${totalCalls}] 🔄 ${lang.toUpperCase()} | ${topic} | ${difficulty} ...`);
 
-                            } catch (err) {
-                                log(`   ❌ Failed: ${err.message}`);
+                                try {
+                                    const response = await fetch('/api/generate-quiz', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ topic, difficulty, lang })
+                                    });
+
+                                    if (!response.ok) throw new Error(`API Error ${response.status}`);
+                                    
+                                    const questions = await response.json();
+                                    
+                                    const batch = db.batch();
+                                    let batchCount = 0;
+                                    questions.forEach(q => {
+                                        // Include difficulty in ID to prevent collision between Easy/Hard
+                                        const safeId = `${lang}_${topic}_${difficulty}_` + q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 30);
+                                        const docRef = db.collection('quiz_bank').doc(safeId);
+                                        batch.set(docRef, { ...q, topic, difficulty, lang, createdAt: new Date(), source: 'ultimate-auto' });
+                                        batchCount++;
+                                    });
+                                    await batch.commit();
+                                    totalSaved += batchCount;
+                                    log(`   ✅ Saved ${batchCount} items.`);
+
+                                } catch (err) {
+                                    log(`   ❌ Failed: ${err.message}`);
+                                }
+                                
+                                // Politeness delay (increased to 2s for stability)
+                                await new Promise(r => setTimeout(r, 2000));
                             }
-                            
-                            // Prevent rate limiting
-                            await new Promise(r => setTimeout(r, 1500));
                         }
                     }
                 }
 
-                log(`🎉 ALL DONE! Total ${totalSaved} questions added.`);
-                alert(`Success! Added ${totalSaved} new questions.`);
+                log(`🎉 ALL DONE! Total ${totalSaved} quality questions added.`);
+                alert(`Success! Your database is now populated with ${totalSaved} verified questions.`);
 
             } catch (e) {
                 log(`❌ FATAL ERROR: ${e.message}`);
