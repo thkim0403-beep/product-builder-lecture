@@ -234,8 +234,19 @@ export async function onRequestPost(context) {
         // [PARSING IMPROVEMENT] Robust JSON Parsing
         let quizData = [];
         try {
-            // Clean up potential Markdown wrappers (```json ... ```)
-            const cleanJson = textData.replace(/```json/g, '').replace(/```/g, '').trim();
+            // Clean up potential Markdown wrappers (```json ... ```) or leading/trailing junk
+            let cleanJson = textData.trim();
+            if (cleanJson.includes("```")) {
+                cleanJson = cleanJson.replace(/```json/g, '').replace(/```/g, '').trim();
+            }
+            
+            // Find the first '[' and last ']' to extract just the array if AI added text around it
+            const startIdx = cleanJson.indexOf('[');
+            const endIdx = cleanJson.lastIndexOf(']');
+            if (startIdx !== -1 && endIdx !== -1) {
+                cleanJson = cleanJson.substring(startIdx, endIdx + 1);
+            }
+
             const rawData = JSON.parse(cleanJson);
             
             if (Array.isArray(rawData)) {
@@ -246,12 +257,27 @@ export async function onRequestPost(context) {
                 }));
             }
         } catch (e) {
-            console.error("JSON Parse Failed:", textData);
-            throw new Error("AI output is not valid JSON");
+            console.error("JSON Parse Failed, falling back to emergency mock. Raw Data:", textData.slice(0, 200));
+            debugLog.push(`Parse Error: ${e.message}`);
+            
+            // --- EMERGENCY FALLBACK TO MOCK_DB ON PARSE FAILURE ---
+            const emergencyMocks = [
+                { "question": "조선왕조실록은 유네스코 세계기록유산이다. (O/X)", "correct": "O", "wrong": ["X"] },
+                { "question": "임진왜란 당시 거북선을 만든 장군은?", "correct": "이순신", "wrong": ["권율", "강감찬", "을지문덕"] },
+                { "question": "3.1 운동이 일어난 해는?", "correct": "1919년", "wrong": ["1945년", "1910년", "1950년"] },
+                { "question": "훈민정음을 창제한 왕은?", "correct": "세종대왕", "wrong": ["태조", "영조", "정조"] },
+                { "question": "태양계에서 가장 큰 행성은?", "correct": "목성", "wrong": ["지구", "화성", "토성"] }
+            ];
+            
+            quizData = emergencyMocks.map(item => ({
+                question: item.question,
+                correct: item.correct,
+                answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
+            }));
         }
 
         if (quizData.length === 0) {
-            throw new Error("No quiz data generated");
+            throw new Error("No quiz data generated even after fallback");
         }
 
         let encodedDebug = "";
