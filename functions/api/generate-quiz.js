@@ -1,5 +1,40 @@
+// Simple In-Memory Rate Limiter (Soft Limit)
+// Note: In serverless, this map resets when the worker instance recycles.
+// For strict global limits, Cloudflare Rate Limiting (Paid) or KV is needed.
+const ipLimits = new Map();
+
 export async function onRequestPost(context) {
     const { request, env } = context;
+
+    // --- RATE LIMITING LOGIC START ---
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const now = Date.now();
+    const windowMs = 60 * 1000; // 1 Minute
+    const maxLimit = 5; // Max 5 requests per minute
+
+    // Get current usage for this IP
+    let usage = ipLimits.get(clientIp) || { count: 0, startTime: now };
+
+    // Reset window if time passed
+    if (now - usage.startTime > windowMs) {
+        usage = { count: 0, startTime: now };
+    }
+
+    // Check limit
+    if (usage.count >= maxLimit) {
+        return new Response(JSON.stringify({ error: "Too Many Requests. Please try again later." }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
+    // Increment count
+    usage.count++;
+    ipLimits.set(clientIp, usage);
+    
+    // Cleanup old entries periodically (optional optimization)
+    if (ipLimits.size > 1000) ipLimits.clear(); 
+    // --- RATE LIMITING LOGIC END ---
 
     try {
         const { topic, difficulty = 'Mixed', lang = 'ko' } = await request.json();
