@@ -234,13 +234,12 @@ export async function onRequestPost(context) {
         // [PARSING IMPROVEMENT] Robust JSON Parsing
         let quizData = [];
         try {
+            // ... (Previous Parsing Logic) ...
             // Clean up potential Markdown wrappers (```json ... ```) or leading/trailing junk
             let cleanJson = textData.trim();
             if (cleanJson.includes("```")) {
                 cleanJson = cleanJson.replace(/```json/g, '').replace(/```/g, '').trim();
             }
-            
-            // Find the first '[' and last ']' to extract just the array if AI added text around it
             const startIdx = cleanJson.indexOf('[');
             const endIdx = cleanJson.lastIndexOf(']');
             if (startIdx !== -1 && endIdx !== -1) {
@@ -250,13 +249,75 @@ export async function onRequestPost(context) {
             const rawData = JSON.parse(cleanJson);
             
             if (Array.isArray(rawData)) {
-                quizData = rawData.map(item => ({
-                    question: item.question,
-                    correct: item.correct,
-                    answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
-                }));
+                // --- [NEW] AI REVIEW STEP (Quality Assurance) ---
+                if (aiAvailable && env.AI) {
+                    try {
+                        const reviewPrompt = `
+                        You are a strict Quiz Auditor. Review the following quiz questions for accuracy and clarity.
+                        
+                        [Rules]
+                        1. Discard questions with factual errors.
+                        2. Discard questions where the answer is ambiguous.
+                        3. Discard questions where 'correct' matches one of the 'wrong' options.
+                        4. Output ONLY the valid questions as a JSON array.
+                        
+                        [Input Questions]
+                        ${JSON.stringify(rawData)}
+                        `;
+
+                        const reviewResponse = await env.AI.run(model, {
+                            messages: [{ role: 'user', content: reviewPrompt }],
+                            temperature: 0.2 // Low temperature for strict logic
+                        });
+
+                        // Attempt to parse review result
+                        let reviewedJson = reviewResponse.response.trim();
+                        if (reviewedJson.includes("```")) {
+                            reviewedJson = reviewedJson.replace(/```json/g, '').replace(/```/g, '').trim();
+                        }
+                        const sIdx = reviewedJson.indexOf('[');
+                        const eIdx = reviewedJson.lastIndexOf(']');
+                        if (sIdx !== -1 && eIdx !== -1) {
+                            reviewedJson = reviewedJson.substring(sIdx, eIdx + 1);
+                        }
+                        
+                        const validatedData = JSON.parse(reviewedJson);
+                        if (Array.isArray(validatedData) && validatedData.length > 0) {
+                            debugLog.push(`QA Passed: ${validatedData.length}/${rawData.length} questions`);
+                            // Use validated data
+                            quizData = validatedData.map(item => ({
+                                question: item.question,
+                                correct: item.correct,
+                                answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
+                            }));
+                        } else {
+                            debugLog.push("QA Failed to return valid JSON, using original draft.");
+                            // Fallback to original if reviewer hallucinated
+                            quizData = rawData.map(item => ({
+                                question: item.question,
+                                correct: item.correct,
+                                answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
+                            }));
+                        }
+                    } catch (qaErr) {
+                        debugLog.push(`QA Error: ${qaErr.message} - Using draft.`);
+                         quizData = rawData.map(item => ({
+                            question: item.question,
+                            correct: item.correct,
+                            answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
+                        }));
+                    }
+                } else {
+                    // No AI for review, just use raw
+                    quizData = rawData.map(item => ({
+                        question: item.question,
+                        correct: item.correct,
+                        answers: [item.correct, ...item.wrong].sort(() => Math.random() - 0.5)
+                    }));
+                }
             }
         } catch (e) {
+            // ... (Existing Catch Block) ...
             console.error("JSON Parse Failed, falling back to emergency mock. Raw Data:", textData.slice(0, 200));
             debugLog.push(`Parse Error: ${e.message}`);
             
