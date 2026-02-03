@@ -15,63 +15,39 @@
         <h1 class="text-3xl font-bold mb-6 text-yellow-400">⚡ Quiz Factory (Admin)</h1>
         
         <div class="bg-gray-800 p-6 rounded-lg shadow-lg space-y-4">
-            <!-- Settings -->
-            <div class="grid grid-cols-2 gap-4">
+            <!-- Bulk Generation Settings -->
+            <div class="mb-4">
+                 <div class="bg-gray-700 p-4 rounded-lg mb-4">
+                    <h4 class="text-sm font-bold text-gray-300 mb-2">⚡ FULL AUTO MODE</h4>
+                    <p class="text-xs text-gray-400 mb-2">Generates questions for ALL topics (History, Science, General, Sports, Movies, Geography) and ALL languages (KO, EN) automatically.</p>
+                 </div>
+
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Topic</label>
-                    <select id="topic" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
-                        <option value="history">한국사 (History)</option>
-                        <option value="science">과학 (Science)</option>
-                        <option value="general">일반상식 (General)</option>
-                        <option value="sports">스포츠 (Sports)</option>
-                        <option value="movies">영화 (Movies)</option>
-                        <option value="geography">지리 (Geography)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Language</label>
-                    <select id="lang" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
-                        <option value="ko">Korean (한국어)</option>
-                        <option value="en">English (영어)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Batch Count (Loops)</label>
-                    <input type="number" id="loops" value="1" min="1" max="10" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
-                    <p class="text-xs text-gray-500 mt-1">* 1 Loop ≈ 10 Questions</p>
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Difficulty</label>
-                    <select id="difficulty" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
-                        <option value="Medium">Medium</option>
-                        <option value="Easy">Easy</option>
-                        <option value="Hard">Hard</option>
-                    </select>
+                    <label class="block text-sm text-gray-400 mb-1">Batch Loops (Per Topic/Lang)</label>
+                    <input type="number" id="loops" value="1" min="1" max="5" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
+                    <p class="text-xs text-yellow-500 mt-1">⚠️ Warning: 1 Loop = 12 API Calls (6 Topics x 2 Langs). Don't set too high!</p>
                 </div>
             </div>
 
             <!-- Action -->
-            <button id="generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition">
-                🚀 Generate & Save to DB
+            <button id="generate-btn" class="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
+                🔥 GENERATE EVERYTHING
             </button>
+            
+            <!-- Hidden inputs for compatibility if needed, or just removed logic -->
 
             <!-- Logs -->
             <div class="mt-6">
-                <h3 class="text-lg font-semibold mb-2">Logs</h3>
-                <div id="logs" class="bg-black p-4 rounded h-64 overflow-y-auto font-mono text-xs text-green-400 border border-gray-700">
-                    Ready to generate...
+                <h3 class="text-lg font-semibold mb-2">Real-time Logs</h3>
+                <div id="logs" class="bg-black p-4 rounded h-96 overflow-y-auto font-mono text-xs text-green-400 border border-gray-700 shadow-inner">
+                    Ready to generate ALL quizzes...
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Import Config -->
-    <!-- REMOVED external script dependency to avoid loading issues -->
-    <!-- <script src="./firebaseConfig.js"></script> -->
-
     <script>
-        // --- INLINED CONFIGURATION (Safety First) ---
-        // This ensures config is present even if external file fails to load.
+        // ... (Config & Init Code remains same) ...
         const firebaseConfig = {
             apiKey: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY",
             authDomain: "ai-quiz-f8680.firebaseapp.com",
@@ -86,116 +62,101 @@
         const logBox = document.getElementById('logs');
         let db;
 
+        const TOPICS = ["history", "science", "general", "sports", "movies", "geography"];
+        const LANGS = ["ko", "en"];
+        const DIFFICULTIES = ["Medium"]; // Simplify to Medium for mass generation
+
         function log(msg) {
             const div = document.createElement('div');
             div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
             logBox.prepend(div);
         }
 
-        // --- ROBUST INITIALIZATION ---
+        // ... (Init Listener remains same) ...
         window.addEventListener('DOMContentLoaded', () => {
+             // ... (Init logic same as before) ...
             log("⏳ Initializing Admin Tool...");
-            
             try {
-                if (!window.firebase) {
-                    throw new Error("Firebase SDK not loaded from CDN.");
-                }
-
+                if (!window.firebase) throw new Error("Firebase SDK not loaded.");
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.firestore();
-                
-                log("✅ Firebase Initialized Successfully.");
-                log("✅ Ready to generate quizzes.");
-                
-                // Enable button only after success
+                log("✅ Ready for FULL AUTO generation.");
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                btn.innerText = "🚀 Generate & Save to DB";
-
             } catch (e) {
-                log(`❌ INIT FATAL ERROR: ${e.message}`);
-                console.error(e);
-                alert("Critical Error: " + e.message);
-                
-                btn.disabled = true;
-                btn.classList.add('bg-red-800', 'cursor-not-allowed');
-                btn.innerText = "❌ System Error (Check Logs)";
+                log(`❌ Init Error: ${e.message}`);
+                btn.innerText = "❌ System Error";
             }
         });
 
         btn.onclick = async () => {
             if (!db) return alert("Firebase not connected!");
             
-            const topic = document.getElementById('topic').value;
-            const lang = document.getElementById('lang').value;
-            const difficulty = document.getElementById('difficulty').value;
             const loops = parseInt(document.getElementById('loops').value);
+            const totalCalls = loops * TOPICS.length * LANGS.length;
+
+            if(!confirm(`This will make ${totalCalls} API calls. It might take a few minutes. Continue?`)) return;
 
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.innerText = "⏳ WORKING... DO NOT CLOSE TAB";
 
             try {
                 let totalSaved = 0;
+                let progress = 0;
 
                 for (let i = 0; i < loops; i++) {
-                    log(`🔄 Batch ${i+1}/${loops}: Requesting API...`);
+                    log(`--- Loop ${i+1}/${loops} ---`);
                     
-                    // 1. Call API
-                    const response = await fetch('/api/generate-quiz', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ topic, difficulty, lang })
-                    });
+                    for (const lang of LANGS) {
+                        for (const topic of TOPICS) {
+                            progress++;
+                            const difficulty = "Medium";
+                            
+                            log(`[${progress}/${totalCalls}] 🔄 ${lang.toUpperCase()} | ${topic} ...`);
 
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        throw new Error(`API Request Failed (${response.status}): ${errText.slice(0, 100)}`);
+                            try {
+                                const response = await fetch('/api/generate-quiz', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ topic, difficulty, lang })
+                                });
+
+                                if (!response.ok) throw new Error(`API Error ${response.status}`);
+                                
+                                const questions = await response.json();
+                                
+                                const batch = db.batch();
+                                let batchCount = 0;
+                                questions.forEach(q => {
+                                    const safeId = `${lang}_${topic}_` + q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 30);
+                                    const docRef = db.collection('quiz_bank').doc(safeId);
+                                    batch.set(docRef, { ...q, topic, difficulty, lang, createdAt: new Date(), source: 'auto-admin' });
+                                    batchCount++;
+                                });
+                                await batch.commit();
+                                totalSaved += batchCount;
+                                log(`   ✅ Saved ${batchCount} items.`);
+
+                            } catch (err) {
+                                log(`   ❌ Failed: ${err.message}`);
+                            }
+                            
+                            // Prevent rate limiting
+                            await new Promise(r => setTimeout(r, 1500));
+                        }
                     }
-                    
-                    const questions = await response.json();
-                    if (!Array.isArray(questions)) {
-                        console.error("Invalid API Response:", questions);
-                        throw new Error("API returned invalid data (not an array). Check console.");
-                    }
-                    
-                    log(`   👉 Received ${questions.length} questions.`);
-
-                    // 2. Save to Firestore
-                    const batch = db.batch();
-                    let batchCount = 0;
-
-                    questions.forEach(q => {
-                        // Create a unique ID based on the question text to avoid duplicates
-                        const safeId = q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
-                        const docRef = db.collection('quiz_bank').doc(safeId);
-                        
-                        batch.set(docRef, {
-                            ...q,
-                            topic: topic,
-                            difficulty: difficulty,
-                            lang: lang,
-                            createdAt: new Date(),
-                            source: 'admin-tool'
-                        });
-                        batchCount++;
-                    });
-
-                    await batch.commit();
-                    totalSaved += batchCount;
-                    log(`   💾 Saved ${batchCount} questions to DB.`);
-                    
-                    // Delay to be polite to APIs
-                    await new Promise(r => setTimeout(r, 1000));
                 }
 
-                log(`🎉 COMPLETE! Total ${totalSaved} questions added.`);
+                log(`🎉 ALL DONE! Total ${totalSaved} questions added.`);
+                alert(`Success! Added ${totalSaved} new questions.`);
 
             } catch (e) {
-                log(`❌ ERROR: ${e.message}`);
-                console.error(e);
-                alert(`Error: ${e.message}`); // Show alert for visibility
+                log(`❌ FATAL ERROR: ${e.message}`);
+                alert(`Error: ${e.message}`);
             } finally {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.innerText = "🔥 GENERATE EVERYTHING";
             }
         };
     </script>
