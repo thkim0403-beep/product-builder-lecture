@@ -1,0 +1,39 @@
+name: Daily AI Quiz Factory
+
+on:
+  schedule:
+    # 매일 한국 시간 오전 4시 (UTC 19:00)에 실행
+    - cron: '0 19 * * *'
+  workflow_dispatch: # 수동 실행 버튼 추가
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run DB Population Script
+        env:
+          # Inlined for immediate operation (Consider moving to Secrets later)
+          FIREBASE_API_KEY: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY"
+          FIREBASE_PROJECT_ID: "ai-quiz-f8680"
+          API_URL: "https://product-builder-lecture-dwj.pages.dev/api/generate-quiz"
+        run: node tests/populate_db.js
+
+      - name: Run Deduplication Script
+        env:
+          # Inlined for immediate operation
+          FIREBASE_API_KEY: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY"
+          FIREBASE_PROJECT_ID: "ai-quiz-f8680"
+        run: node tests/deduplicate_db.js

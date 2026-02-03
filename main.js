@@ -433,6 +433,24 @@ async function fetchQuiz(topicId) {
             batch.commit().then(() => console.log(`[CACHE] Saved ${saveCount} new questions to DB`));
         }
 
+        // [STEP 4] De-duplicate and Shuffle
+        // Ensure no duplicate questions appear in the game session
+        const uniqueQuestions = [];
+        const seenQuestions = new Set();
+        
+        // Merge fetched data with current mock/cache if needed, but here 'data' is the source
+        // If 'data' has duplicates itself, filter them.
+        for (const q of data) {
+            // Normalize text for comparison (remove spaces, lowercase)
+            const signature = q.question.replace(/\s+/g, '').toLowerCase();
+            if (!seenQuestions.has(signature)) {
+                seenQuestions.add(signature);
+                uniqueQuestions.push(q);
+            }
+        }
+        
+        currentQuizData = uniqueQuestions;
+
         loadingScreen.classList.add('hidden'); 
         gameScreen.classList.remove('hidden'); 
         startSoloGame();

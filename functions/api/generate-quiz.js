@@ -127,6 +127,9 @@ export async function onRequestPost(context) {
             }
         ]
         `;
+        
+        // Random Seed to force variety
+        const randomSeed = Math.random().toString(36).substring(7);
 
         if (promptMode === 'FORMAT_ONLY') {
             systemPrompt = `You are a quiz formatter. Convert the input into the specified JSON format. ${jsonInstruction}`;
@@ -138,19 +141,20 @@ export async function onRequestPost(context) {
 
             [원칙]
             1. **포맷**: 반드시 **JSON 배열**로만 출력하세요. (서론/결론 금지)
-            2. **문체**: 예능 자막처럼 자연스러운 '해요체' (~인가요? ~은 무엇일까요?)
-            3. **표기**: 인명/지명은 한글로(웨인 루니), 통용 약어는 영어 허용(DNA, TV).
+            2. **다양성**: 같은 내용을 반복하지 말고, 제공된 자료의 다양한 부분을 활용하세요. (Seed: ${randomSeed})
+            3. **문체**: 예능 자막처럼 자연스러운 '해요체' (~인가요? ~은 무엇일까요?)
             4. **오답**: 정답과 헷갈리는 그럴듯한 오답 배치.
             ${jsonInstruction}`;
 
             userPrompt = `[참고 자료]:\n${factContext}\n\n위 자료를 바탕으로 ${difficulty} 난이도 퀴즈 10개를 JSON으로 생성하세요.`;
 
         } else {
-            systemPrompt = `당신은 한국어 퀴즈 작가입니다. 주제에 맞는 퀴즈 10개를 만드세요.
+            systemPrompt = `당신은 창의적인 퀴즈 작가입니다. 주제에 맞는 새롭고 다양한 퀴즈 10개를 만드세요.
                 [원칙]
                 1. 오직 JSON 배열만 출력.
                 2. 인명/지명은 한글 표기 필수.
                 3. 자연스러운 해요체 사용.
+                4. **중복 방지**: 뻔한 문제보다는 참신한 문제를 출제하세요. (Seed: ${randomSeed})
                 ${jsonInstruction}`;
             userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 퀴즈 10개를 JSON으로 만들어주세요.`;
         }
@@ -163,7 +167,7 @@ export async function onRequestPost(context) {
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    temperature: 0.5
+                    temperature: 0.8 // Increased for variety
                 });
             } catch (aiErr) {
                 console.error("AI Run Error:", aiErr);
