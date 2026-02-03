@@ -173,18 +173,54 @@ export async function onRequestPost(context) {
         }
 
         if (!aiAvailable || !env.AI || !aiResponse) {
-            // Mock Data (Updated to JSON)
+            // Mock Data (Updated to JSON) with realistic examples
             debugLog.push("Using Mock Data Fallback");
-            const mockQuestions = [];
+            
+            const MOCK_DB = {
+                "history": [
+                    { "question": "조선왕조실록은 유네스코 세계기록유산이다. (O/X)", "correct": "O", "wrong": ["X"] },
+                    { "question": "임진왜란 당시 거북선을 만든 장군은?", "correct": "이순신", "wrong": ["권율", "강감찬", "을지문덕"] },
+                    { "question": "3.1 운동이 일어난 해는?", "correct": "1919년", "wrong": ["1945년", "1910년", "1950년"] },
+                    { "question": "훈민정음을 창제한 왕은?", "correct": "세종대왕", "wrong": ["태조", "영조", "정조"] },
+                    { "question": "고려를 건국한 왕은?", "correct": "왕건", "wrong": ["이성계", "궁예", "견훤"] },
+                    { "question": "신라의 수도는 어디였나요?", "correct": "경주", "wrong": ["서울", "평양", "부여"] },
+                    { "question": "대한민국 임시정부의 초대 대통령은?", "correct": "이승만", "wrong": ["김구", "안창호", "박은식"] },
+                    { "question": "을지문덕 장군이 활약한 전쟁은?", "correct": "살수대첩", "wrong": ["귀주대첩", "행주대첩", "한산도대첩"] },
+                    { "question": "발해를 건국한 사람은?", "correct": "대조영", "wrong": ["왕건", "궁예", "견훤"] },
+                    { "question": "동학농민운동의 지도자는?", "correct": "전봉준", "wrong": ["최제우", "최시형", "손병희"] }
+                ],
+                "science": [
+                    { "question": "물(H2O)을 구성하는 원소가 아닌 것은?", "correct": "탄소", "wrong": ["수소", "산소"] },
+                    { "question": "태양계에서 가장 큰 행성은?", "correct": "목성", "wrong": ["지구", "화성", "토성"] },
+                    { "question": "지구의 위성은?", "correct": "달", "wrong": ["타이탄", "유로파", "이오"] },
+                    { "question": "빛의 삼원색이 아닌 것은?", "correct": "노랑", "wrong": ["빨강", "초록", "파랑"] },
+                    { "question": "사람의 몸에서 가장 큰 장기는?", "correct": "피부", "wrong": ["간", "심장", "폐"] }
+                ],
+                "default": []
+            };
+
+            // Fill default mock
             for(let i=1; i<=10; i++) {
-                mockQuestions.push({
+                MOCK_DB.default.push({
                     "question": `[Mock] ${topic}에 관한 ${difficulty} 난이도 문제 ${i} (언어: ${lang})`,
                     "correct": "정답",
                     "wrong": ["오답1", "오답2", "오답3"]
                 });
             }
+
+            const selectedMocks = MOCK_DB[topic] || MOCK_DB.default;
+            // Fill up to 10 if not enough (e.g. science has 5)
+            const resultMocks = [...selectedMocks];
+            while(resultMocks.length < 10) {
+                 resultMocks.push({
+                    "question": `[Mock] ${topic} 추가 문제 ${resultMocks.length+1}`,
+                    "correct": "정답",
+                    "wrong": ["오답1", "오답2"]
+                });
+            }
+            
             aiResponse = {
-                response: JSON.stringify(mockQuestions)
+                response: JSON.stringify(resultMocks.slice(0, 10))
             };
         }
 

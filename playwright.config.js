@@ -3,7 +3,7 @@ const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests',
   webServer: {
-    command: 'npx wrangler pages dev . --port 8787',
+    command: 'npx wrangler pages dev . --port 8787 --compatibility-date=2026-01-24',
     port: 8787,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',

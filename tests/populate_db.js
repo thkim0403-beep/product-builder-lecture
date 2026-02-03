@@ -1,9 +1,9 @@
 const { initializeApp } = require("firebase/app");
 const { getFirestore, doc, writeBatch, increment } = require("firebase/firestore");
-// Node.js Fetch Polyfill (for environments < Node 18 or explicitly safe)
+// Node.js Fetch Polyfill
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// 1. Config (from firebaseConfig.js)
+// 1. Config
 const firebaseConfig = {
   apiKey: "AIzaSyAO4HT33-jzFI0VKvxGTbrAwCNtNUcpQYY",
   authDomain: "ai-quiz-f8680.firebaseapp.com",
@@ -19,106 +19,98 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // 3. Configuration
-const API_URL = "https://product-builder-lecture-dwj.pages.dev/api/generate-quiz";
-const TOPICS = ["history", "science", "general", "movies", "sports", "music", "geography"];
-const DIFFICULTIES = ["Easy", "Medium", "Hard"];
-const LANGS = ["ko", "en"];
+const API_URL = "http://127.0.0.1:8787/api/generate-quiz";
+const TOPICS = ["history", "science", "general"];
+const DIFFICULTIES = ["Medium"];
+const LANGS = ["ko"];
+const TARGET_PER_TOPIC = 20; // 주제당 20개씩 생성
+const QUESTIONS_PER_CALL = 10; // 1회 호출당 생성 개수
 
 // 4. Seeding Function
 async function seedDatabase() {
-  console.log("🚀 Starting DB Population & Simulation...");
+  console.log(`🚀 Starting Bulk DB Population: Target ${TARGET_PER_TOPIC} per topic...`);
   let totalSaved = 0;
 
-  // Reduced loop for quicker feedback, but enough to generate data
-  // User asked for "many", so let's do a decent amount.
-  const CYCLES = 3; 
+  for (const lang of LANGS) {
+    for (const topic of TOPICS) {
+      console.log(`
+--- Target: [${lang}] ${topic} (Goal: ${TARGET_PER_TOPIC}) ---`);
+      
+      let topicCount = 0;
+      const iterations = Math.ceil(TARGET_PER_TOPIC / QUESTIONS_PER_CALL);
 
-  for (let i = 0; i < CYCLES; i++) { 
-    console.log(`\n--- Cycle ${i + 1}/${CYCLES} ---`);
-    for (const lang of LANGS) {
-        for (const topic of TOPICS) {
-        const difficulty = DIFFICULTIES[Math.floor(Math.random() * DIFFICULTIES.length)];
+      for (let i = 0; i < iterations; i++) {
+        const difficulty = DIFFICULTIES[i % DIFFICULTIES.length]; // 순차적으로 난이도 배분
         
-        // Log less verbosely
-        process.stdout.write(`Gen: [${lang}] ${topic} `);
+        process.stdout.write(`  [${i + 1}/${iterations}] Gen: ${difficulty}... `);
         
         try {
-            // A. Call API
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic, difficulty, lang })
-            });
+          const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, difficulty, lang })
+          });
 
-            if (!response.ok) {
-                console.log(`❌ API ${response.status}`);
-                continue;
-            }
+          if (!response.ok) {
+            console.log(`❌ API ${response.status}`);
+            continue;
+          }
 
-            const data = await response.json();
+          const data = await response.json();
+          if (!Array.isArray(data) || data.length === 0) {
+            console.log("⚠️ No Data");
+            continue;
+          }
+
+          const batch = writeBatch(db);
+          let callCount = 0;
+
+          data.forEach(q => {
+            const safeId = `${lang}_${topic}_` + q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
             
-            if (!Array.isArray(data) || data.length === 0) {
-                console.log("⚠️ No Data");
-                continue;
-            }
+            // 1. Save Question
+            const docRef = doc(db, "quiz_bank", safeId);
+            batch.set(docRef, {
+              ...q,
+              topic: topic,
+              difficulty: difficulty,
+              lang: lang,
+              createdAt: new Date(),
+              source: "bulk_seeding_script"
+            }, { merge: true });
 
-            // B. Save to Firestore (Questions & Stats)
-            const batch = writeBatch(db);
-            let count = 0;
+            // 2. Stats Simulation
+            const statsRef = doc(db, "question_stats", safeId);
+            const isCorrect = Math.random() > 0.3;
+            batch.set(statsRef, {
+              question: q.question,
+              topic: topic,
+              lastPlayed: new Date(),
+              totalAttempts: increment(1),
+              correctCount: increment(isCorrect ? 1 : 0),
+              wrongCount: increment(isCorrect ? 0 : 1)
+            }, { merge: true });
 
-            data.forEach(q => {
-                const safeId = q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
-                
-                // 1. Save Question to Cache
-                const docRef = doc(db, "quiz_bank", safeId);
-                batch.set(docRef, {
-                    ...q,
-                    topic: topic,
-                    difficulty: difficulty,
-                    lang: lang,
-                    createdAt: new Date(),
-                    source: "seeding_script"
-                });
+            callCount++;
+          });
 
-                // 2. Simulate Solving (Update Stats)
-                const isCorrect = Math.random() > 0.3; // 70% Correct Rate
-                const statsRef = doc(db, "question_stats", safeId);
-                
-                // Init if needed (merge)
-                batch.set(statsRef, {
-                    question: q.question,
-                    topic: topic,
-                    lastPlayed: new Date()
-                }, { merge: true });
+          await batch.commit();
+          topicCount += callCount;
+          totalSaved += callCount;
+          console.log(`✅ +${callCount} (Topic Total: ${topicCount})`);
 
-                // Update counters
-                batch.set(statsRef, {
-                    totalAttempts: increment(1),
-                    correctCount: increment(isCorrect ? 1 : 0),
-                    wrongCount: increment(isCorrect ? 0 : 1)
-                }, { merge: true });
-
-                count++;
-            });
-
-            await batch.commit();
-            console.log(`✅ Saved ${count}`);
-            totalSaved += count;
-
-            // C. Politeness Delay
-            await new Promise(r => setTimeout(r, 500)); 
-
+          // API rate limit 방지를 위한 짧은 대기
+          await new Promise(r => setTimeout(r, 1000)); 
         } catch (e) {
-            console.log(`❌ Error: ${e.message}`);
+          console.log(`❌ Error: ${e.message}`);
         }
-        }
+      }
     }
   }
 
-  console.log(`\n✨ Finished! Total questions processed: ${totalSaved}`);
+  console.log(`
+✨ Finished! Total questions processed: ${totalSaved}`);
   process.exit(0);
 }
-
-seedDatabase();
 
 seedDatabase();

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Generator Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
+<body class="bg-gray-900 text-white p-10">
+
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-yellow-400">⚡ Quiz Factory (Admin)</h1>
+        
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg space-y-4">
+            <!-- Settings -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Topic</label>
+                    <select id="topic" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
+                        <option value="history">한국사 (History)</option>
+                        <option value="science">과학 (Science)</option>
+                        <option value="general">일반상식 (General)</option>
+                        <option value="sports">스포츠 (Sports)</option>
+                        <option value="movies">영화 (Movies)</option>
+                        <option value="geography">지리 (Geography)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Language</label>
+                    <select id="lang" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
+                        <option value="ko">Korean (한국어)</option>
+                        <option value="en">English (영어)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Batch Count (Loops)</label>
+                    <input type="number" id="loops" value="1" min="1" max="10" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
+                    <p class="text-xs text-gray-500 mt-1">* 1 Loop ≈ 10 Questions</p>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Difficulty</label>
+                    <select id="difficulty" class="w-full bg-gray-700 p-2 rounded border border-gray-600">
+                        <option value="Medium">Medium</option>
+                        <option value="Easy">Easy</option>
+                        <option value="Hard">Hard</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Action -->
+            <button id="generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition">
+                🚀 Generate & Save to DB
+            </button>
+
+            <!-- Logs -->
+            <div class="mt-6">
+                <h3 class="text-lg font-semibold mb-2">Logs</h3>
+                <div id="logs" class="bg-black p-4 rounded h-64 overflow-y-auto font-mono text-xs text-green-400 border border-gray-700">
+                    Ready to generate...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Config -->
+    <script src="./firebaseConfig.js"></script>
+
+    <script>
+        // Initialize Firebase
+        let db;
+        try {
+            if (typeof firebaseConfig !== 'undefined') {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                log("✅ Firebase Connected");
+            } else {
+                log("❌ Error: firebaseConfig not found");
+            }
+        } catch (e) {
+            log("❌ Firebase Init Error: " + e.message);
+        }
+
+        const btn = document.getElementById('generate-btn');
+        const logBox = document.getElementById('logs');
+
+        function log(msg) {
+            const div = document.createElement('div');
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logBox.prepend(div);
+        }
+
+        btn.onclick = async () => {
+            if (!db) return alert("Firebase not connected!");
+            
+            const topic = document.getElementById('topic').value;
+            const lang = document.getElementById('lang').value;
+            const difficulty = document.getElementById('difficulty').value;
+            const loops = parseInt(document.getElementById('loops').value);
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                let totalSaved = 0;
+
+                for (let i = 0; i < loops; i++) {
+                    log(`🔄 Batch ${i+1}/${loops}: Requesting API...`);
+                    
+                    // 1. Call API
+                    const response = await fetch('/api/generate-quiz', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ topic, difficulty, lang })
+                    });
+
+                    if (!response.ok) throw new Error("API Request Failed");
+                    
+                    const questions = await response.json();
+                    log(`   👉 Received ${questions.length} questions.`);
+
+                    // 2. Save to Firestore
+                    const batch = db.batch();
+                    let batchCount = 0;
+
+                    questions.forEach(q => {
+                        // Create a unique ID based on the question text to avoid duplicates
+                        const safeId = q.question.replace(/[^a-zA-Z0-9가-힣]/g, "").substring(0, 50);
+                        const docRef = db.collection('quiz_bank').doc(safeId);
+                        
+                        batch.set(docRef, {
+                            ...q,
+                            topic: topic,
+                            difficulty: difficulty,
+                            lang: lang,
+                            createdAt: new Date(),
+                            source: 'admin-tool'
+                        });
+                        batchCount++;
+                    });
+
+                    await batch.commit();
+                    totalSaved += batchCount;
+                    log(`   💾 Saved ${batchCount} questions to DB.`);
+                    
+                    // Delay to be polite to APIs
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                log(`🎉 COMPLETE! Total ${totalSaved} questions added.`);
+
+            } catch (e) {
+                log(`❌ ERROR: ${e.message}`);
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        };
+    </script>
+</body>
+</html>

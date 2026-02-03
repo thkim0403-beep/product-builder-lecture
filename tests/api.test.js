@@ -71,6 +71,22 @@ async function runTest() {
         }
         console.log("PASS: Quiz generated successfully");
 
+        // Test 2.1: Verify History Mock Data (Improved Mock)
+        console.log("Test 2.1: Checking History Mock Data...");
+        const histPayload = { topic: 'history', difficulty: 'Easy', lang: 'ko' };
+        const resHist = await fetch(baseUrl + '/api/generate-quiz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(histPayload)
+        });
+        const histData = await resHist.json();
+        const foundLee = histData.some(q => q.answers.includes("이순신") || q.correct === "이순신");
+        if (!foundLee) {
+            console.warn("WARNING: History mock data didn't contain '이순신'. Might be using old mocks or fallback.");
+        } else {
+            console.log("PASS: History mock data looks correct (Found '이순신')");
+        }
+
         // Test 3: Explain API (Mocking wrong answers)
         console.log("Test 3: Explain Wrong Answers...");
         const explainPayload = { 
