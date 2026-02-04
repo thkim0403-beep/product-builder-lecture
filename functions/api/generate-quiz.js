@@ -190,14 +190,23 @@ export async function onRequestPost(context) {
             userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 절대 중복되지 않는 창의적인 퀴즈 10개를 JSON으로 만들어주세요.`;
         }
 
+        // List of models to try in order
+        const MODELS = [
+            '@cf/meta/llama-3-8b-instruct',       // Primary
+            '@cf/mistral/mistral-7b-instruct-v0.1', // Backup 1
+            '@cf/qwen/qwen1.5-7b-chat-awq',       // Backup 2
+            '@cf/google/gemma-7b-it-lora'         // Backup 3
+        ];
+
         let aiResponse;
         if (aiAvailable && env.AI) {
             let attempts = 0;
-            const maxAttempts = 3;
-            while (attempts < maxAttempts) {
+            // Try each model until one succeeds
+            for (const currentModel of MODELS) {
                 try {
                     attempts++;
-                    aiResponse = await env.AI.run(model, {
+                    // console.log(`Trying Model: ${currentModel}`); 
+                    aiResponse = await env.AI.run(currentModel, {
                         messages: [
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: userPrompt }
@@ -205,14 +214,19 @@ export async function onRequestPost(context) {
                         temperature: 0.9, 
                         top_p: 0.9
                     });
-                    if (aiResponse) break; // Success
+                    
+                    if (aiResponse) {
+                        debugLog.push(`Success with ${currentModel}`);
+                        break; // Success! Exit loop
+                    }
                 } catch (aiErr) {
-                    console.error(`AI Run Error (Attempt ${attempts}/${maxAttempts}):`, aiErr);
-                    debugLog.push(`AI Error (${attempts}): ${aiErr.message}`);
-                    if (attempts === maxAttempts) aiAvailable = false; // Give up after retries
-                    await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
+                    console.error(`AI Model Failed (${currentModel}):`, aiErr);
+                    debugLog.push(`Failed ${currentModel}: ${aiErr.message}`);
+                    // Continue to next model...
                 }
             }
+            
+            if (!aiResponse) aiAvailable = false; // All models failed
         }
 
         if (!aiAvailable || !env.AI || !aiResponse) {
