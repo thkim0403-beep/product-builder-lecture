@@ -167,27 +167,28 @@ export async function onRequestPost(context) {
             userPrompt = `Convert these questions:\n${JSON.stringify(sourceQuestions)}`;
 
         } else if (promptMode === 'NAVER_FACTS') {
-            systemPrompt = `당신은 대한민국 최고의 예능 퀴즈 작가입니다.
-            제공된 [참고 자료]를 바탕으로 시청자가 처음 들어볼 법한 아주 신선하고 독특한 퀴즈 10문제를 만드세요.
-
-            [절대 원칙]
-            1. **중복 금지**: 이전에 나왔을 법한 뻔한 문제는 배제하고, 자료의 세부적인 내용을 파고드세요.
-            2. **포맷**: 반드시 **JSON 배열**로만 출력하세요. (서론/결론 금지)
-            3. **다양성**: Seed(${randomSeed})를 활용하여 매번 다른 관점에서 질문하세요.
-            4. **문체**: 예능 자막처럼 자연스러운 '해요체' (~인가요? ~은 무엇일까요?)
+            systemPrompt = `You are a quiz generator. Read the provided [Context], then generate 10 multiple-choice questions in Korean.
+            
+            [Rules]
+            1. Output ONLY a valid JSON array.
+            2. Language: Questions/Answers must be in KOREAN.
+            3. Tone: Casual and fun (e.g., ~인가요?).
+            4. Uniqueness: Use Seed(${randomSeed}) to vary content.
             ${jsonInstruction}`;
 
-            userPrompt = `[참고 자료]:\n${factContext}\n\n위 자료를 바탕으로 ${difficulty} 난이도 퀴즈 10개를 JSON으로 생성하세요.`;
+            userPrompt = `[Context]:\n${factContext}\n\nGenerate 10 Korean questions based on this context. Difficulty: ${difficulty}.`;
 
         } else {
-            systemPrompt = `당신은 세상에 없던 문제를 만드는 천재 퀴즈 작가입니다. 주제에 대해 누구도 예상치 못한 참신하고 다양한 퀴즈 10개를 만드세요.
-                [절대 원칙]
-                1. 오직 JSON 배열만 출력.
-                2. **독창성**: 초등학생도 아는 상식적인 문제는 금지합니다. 매우 구체적이고 흥미로운 사실을 다루세요.
-                3. **다양성 보장**: Seed(${randomSeed})를 반영하여 기존과 완전히 다른 문제를 만드세요.
-                4. 자연스러운 해요체 사용.
+            // General Generation (Fallback or English)
+            const targetLang = lang === 'ko' ? "KOREAN" : "ENGLISH";
+            systemPrompt = `You are a creative quiz generator. Create 10 unique multiple-choice questions.
+                [Rules]
+                1. Output ONLY a valid JSON array.
+                2. Language: Output in ${targetLang}.
+                3. Difficulty: ${difficulty}.
+                4. Uniqueness: Use Seed(${randomSeed}).
                 ${jsonInstruction}`;
-            userPrompt = `주제: "${topic}"\n난이도: ${difficulty}\n위 조건으로 절대 중복되지 않는 창의적인 퀴즈 10개를 JSON으로 만들어주세요.`;
+            userPrompt = `Topic: "${topic}"\nCreate 10 ${targetLang} questions now.`;
         }
 
         // List of models to try in order
