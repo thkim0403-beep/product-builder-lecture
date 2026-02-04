@@ -31,7 +31,7 @@
 
             <!-- Action -->
             <button id="generate-btn" class="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
-                🔥 GENERATE EVERYTHING
+                🔥 GENERATE EVERYTHING (V2)
             </button>
             
             <!-- Hidden inputs for compatibility if needed, or just removed logic -->
@@ -40,7 +40,7 @@
             <div class="mt-6">
                 <h3 class="text-lg font-semibold mb-2">Real-time Logs</h3>
                 <div id="logs" class="bg-black p-4 rounded h-96 overflow-y-auto font-mono text-xs text-green-400 border border-gray-700 shadow-inner">
-                    Ready to generate ALL quizzes...
+                    Ready to generate ALL quizzes (V2)...
                 </div>
             </div>
         </div>
@@ -104,6 +104,31 @@
                 let totalSaved = 0;
                 let progress = 0;
 
+                // Helper for 429 Retries
+                const fetchWithRetry = async (payload, retries = 3, delay = 10000) => {
+                    try {
+                        const response = await fetch('/api/generate-quiz', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status == 429) {
+                            if (retries > 0) {
+                                log(`   ⚠️ Rate Limit Hit! Cooling down for ${delay/1000}s...`);
+                                await new Promise(r => setTimeout(r, delay));
+                                return fetchWithRetry(payload, retries - 1, delay * 2); // Exponential backoff
+                            }
+                            throw new Error("API Error 429 (Too Many Requests) - Skipped");
+                        }
+
+                        if (!response.ok) throw new Error(`API Error ${response.status}`);
+                        return await response.json();
+                    } catch (e) {
+                        throw e;
+                    }
+                };
+
                 for (let i = 0; i < loops; i++) {
                     log(`--- Loop ${i+1}/${loops} ---`);
                     
@@ -115,15 +140,7 @@
                                 log(`[${progress}/${totalCalls}] 🔄 ${lang.toUpperCase()} | ${topic} | ${difficulty} ...`);
 
                                 try {
-                                    const response = await fetch('/api/generate-quiz', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ topic, difficulty, lang })
-                                    });
-
-                                    if (!response.ok) throw new Error(`API Error ${response.status}`);
-                                    
-                                    const questions = await response.json();
+                                    const questions = await fetchWithRetry({ topic, difficulty, lang, bypassCache: true });
                                     
                                     const batch = db.batch();
                                     let batchCount = 0;
@@ -142,8 +159,8 @@
                                     log(`   ❌ Failed: ${err.message}`);
                                 }
                                 
-                                // Politeness delay (increased to 2s for stability)
-                                await new Promise(r => setTimeout(r, 2000));
+                                // Politeness delay (increased to 6s for OpenTrivia stability)
+                                await new Promise(r => setTimeout(r, 6000));
                             }
                         }
                     }
