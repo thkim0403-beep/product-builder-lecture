@@ -192,19 +192,26 @@ export async function onRequestPost(context) {
 
         let aiResponse;
         if (aiAvailable && env.AI) {
-            try {
-                aiResponse = await env.AI.run(model, {
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    temperature: 0.9, // Variety max
-                    top_p: 0.9 // Diversity filter
-                });
-            } catch (aiErr) {
-                console.error("AI Run Error:", aiErr);
-                debugLog.push(`AI Error: ${aiErr.message}`);
-                aiAvailable = false; // Fallback to mock
+            let attempts = 0;
+            const maxAttempts = 3;
+            while (attempts < maxAttempts) {
+                try {
+                    attempts++;
+                    aiResponse = await env.AI.run(model, {
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userPrompt }
+                        ],
+                        temperature: 0.9, 
+                        top_p: 0.9
+                    });
+                    if (aiResponse) break; // Success
+                } catch (aiErr) {
+                    console.error(`AI Run Error (Attempt ${attempts}/${maxAttempts}):`, aiErr);
+                    debugLog.push(`AI Error (${attempts}): ${aiErr.message}`);
+                    if (attempts === maxAttempts) aiAvailable = false; // Give up after retries
+                    await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
+                }
             }
         }
 
