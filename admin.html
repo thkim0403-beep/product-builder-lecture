@@ -113,13 +113,14 @@
                             body: JSON.stringify(payload)
                         });
 
-                        if (response.status == 429) {
+                        if (response.status == 429 || response.status >= 500) {
                             if (retries > 0) {
-                                log(`   ⚠️ Rate Limit Hit! Cooling down for ${delay/1000}s...`);
-                                await new Promise(r => setTimeout(r, delay));
-                                return fetchWithRetry(payload, retries - 1, delay * 2); // Exponential backoff
+                                const waitTime = response.status >= 500 ? 30000 : delay; // Wait 30s for 500 errors
+                                log(`   ⚠️ Server Error (${response.status})! Cooling down for ${waitTime/1000}s...`);
+                                await new Promise(r => setTimeout(r, waitTime));
+                                return fetchWithRetry(payload, retries - 1, delay * 2); 
                             }
-                            throw new Error("API Error 429 (Too Many Requests) - Skipped");
+                            throw new Error(`API Error ${response.status} - Retries Exhausted`);
                         }
 
                         if (!response.ok) throw new Error(`API Error ${response.status}`);
