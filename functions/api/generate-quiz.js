@@ -8,58 +8,68 @@ export async function onRequestPost(context) {
   };
 
   try {
-    // 1. AI 바인딩 찾기 (이름이 대소문자 다르거나 다른 이름일 경우 대비)
-    const AI = env.AI || env.ai || env.Ai;
-    
+    const AI = env.AI;
     if (!AI) {
       return new Response(JSON.stringify([{
-        question: "오류: AI 바인딩을 찾을 수 없습니다. (환경변수: " + Object.keys(env).join(", ") + ")",
-        correct: "확인",
-        answers: ["확인", "바인딩체크", "설정", "대기"]
+        question: `환경 변수 오류: AI 바인딩이 없습니다. 현재 변수: ${Object.keys(env).join(", ")}`,
+        correct: "확인", answers: ["확인", "설정필요", "대기", "오류"]
       }]), { status: 200, headers });
     }
 
-    // 2. 입력 데이터 처리
     const body = await request.json().catch(() => ({}));
     const topic = body.topic || "일반 상식";
     const lang = body.lang || "ko";
 
-    // 3. AI 실행
-    const model = "@cf/meta/llama-3.1-8b-instruct";
-    const result = await AI.run(model, {
-      messages: [
-        { role: "system", content: "You are a quiz master. Output ONLY a valid JSON array." },
-        { role: "user", content: `Create 10 quizzes about ${topic} in ${lang}. Format: [{"question":"","correct":"","wrong":["","",""]}]` }
-      ]
-    });
-
-    const text = result.response || (result.result && result.result.response) || (typeof result === "string" ? result : "");
-    let quizData = [];
+    let aiText = "";
+    // 안정성을 위해 두 가지 모델 시도
+    const models = ["@cf/meta/llama-3.1-8b-instruct", "@cf/meta/llama-3-8b-instruct"];
     
-    if (text) {
-      const start = text.indexOf("[");
-      const end = text.lastIndexOf("]");
-      if (start !== -1 && end !== -1) {
-        quizData = JSON.parse(text.substring(start, end + 1));
+    for (const model of models) {
+      try {
+        const result = await AI.run(model, {
+          messages: [
+            { role: "system", content: "You are a quiz master. Output ONLY a valid JSON array. No chatter." },
+            { role: "user", content: `Topic: ${topic}. Language: ${lang}. Create 10 quizzes. Format: [{"question":"","correct":"","wrong":["","",""]}]` }
+          ]
+        });
+        aiText = result.response || (result.result && result.result.response) || (typeof result === "string" ? result : "");
+        if (aiText && aiText.includes("[")) break;
+      } catch (e) {
+        console.error(`${model} failed: ${e.message}`);
       }
     }
 
-    if (!quizData.length) throw new Error("AI 응답 파싱 실패");
+    if (!aiText) throw new Error("AI 모델이 응답을 주지 않습니다.");
 
-    const final = quizData.map(q => ({
-      question: q.question,
-      correct: q.correct,
-      answers: [q.correct, ...(q.wrong || [])].sort(() => Math.random() - 0.5)
+    let quizData = [];
+    try {
+      // JSON 파싱 방해 요소 제거
+      let cleanJson = aiText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
+      const start = cleanJson.indexOf("[");
+      const end = cleanJson.lastIndexOf("]");
+      if (start !== -1 && end !== -1) {
+        quizData = JSON.parse(cleanJson.substring(start, end + 1));
+      } else {
+        throw new Error(`JSON 형식을 찾을 수 없음. 응답내용: ${aiText.substring(0, 50)}...`);
+      }
+    } catch (pErr) {
+      throw new Error(`파싱 에러: ${pErr.message}`);
+    }
+
+    if (!Array.isArray(quizData) || quizData.length === 0) throw new Error("데이터가 배열 형식이 아닙니다.");
+
+    const final = quizData.slice(0, 10).map(q => ({
+      question: q.question || "내용 없음",
+      correct: q.correct || "정답 없음",
+      answers: [q.correct || "정답", ...(q.wrong || ["오답1", "오답2", "오답3"])].sort(() => Math.random() - 0.5)
     }));
 
     return new Response(JSON.stringify(final), { status: 200, headers });
 
   } catch (err) {
-    // 에러 발생 시 에러 내용을 상세히 출력 (500 에러 방지)
     return new Response(JSON.stringify([{
-      question: `시스템 오류 발생: ${err.message}`,
-      correct: "확인",
-      answers: ["확인", "로그확인", "재시도", "안내"]
+      question: `상세 오류: ${err.message}`,
+      correct: "확인", answers: ["확인", "재시도", "로그확인", "안내"]
     }]), { status: 200, headers });
   }
 }
