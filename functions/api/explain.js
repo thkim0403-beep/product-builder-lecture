@@ -11,80 +11,49 @@ export async function onRequestPost(context) {
             });
         }
 
-        let aiAvailable = true;
-        if (!env.AI) {
-            console.warn('AI binding not found. Using Mock Explanation.');
-            aiAvailable = false;
-        }
+        const runAI = async (system, user, temp = 0.5) => {
+            if (!env.AI) return null;
+            const MODELS = [
+                '@cf/meta/llama-3.1-8b-instruct',
+                '@cf/meta/llama-3-8b-instruct',
+                '@cf/meta/llama-3.2-3b-instruct',
+                '@cf/mistral/mistral-7b-instruct-v0.1'
+            ];
+
+            for (const model of MODELS) {
+                try {
+                    const response = await env.AI.run(model, {
+                        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+                        temperature: temp
+                    });
+                    
+                    if (response) {
+                        return response.response || (response.result && response.result.response) || (typeof response === 'string' ? response : JSON.stringify(response));
+                    }
+                } catch (e) { console.error(`Failed ${model}: ${e.message}`); }
+            }
+            return null;
+        };
 
         let systemPrompt = "";
         let userPrompt = "";
 
         if (lang === 'ko') {
-            systemPrompt = `당신은 대한민국 인기 TV 예능 프로그램의 메인 퀴즈 작가입니다.
-            참가자가 틀린 문제에 대해, 정답이 왜 정답인지 **친근하고 재치 있는 '해요체'**로 해설해 주세요.
-
-            [필수 원칙]
-            1. **용어 통일**: 입력으로 제공된 **'정답' 텍스트를 그대로 사용**하세요. 절대 영어로 다시 번역하거나 다른 말로 바꾸지 마세요. (예: 정답이 '이순신'이면 설명에서도 '이순신'이라고 해야 함)
-            2. **표기법**: 설명 중간에 인명/지명이 나올 경우 반드시 **한글**로 표기하세요. (영어 사용 금지)
-            3. **문체**: 딱딱한 설명 대신, "아쉽네요! 정답은 ~에요. 왜냐하면 ~" 처럼 대화하듯 자연스럽게 작성하세요.
-            
-            [형식]
-            Q: [문제 내용]
-            A: [정답 텍스트] - [재치 있는 해설 (한 문장)]`;
-
-            userPrompt = `
-            다음 오답 노트에 대한 해설을 작성해주세요.
-            
-            [틀린 문제 목록]
-            ` + wrongAnswers.map(wa => `질문: "${wa.question}" / 정답: "${wa.correct}"`).join('\n');
+            systemPrompt = `당신은 퀴즈 해설 작가입니다. 틀린 문제에 대해 친근한 '해요체'로 해설해 주세요. 정답 텍스트를 반드시 포함하세요.`;
+            userPrompt = wrongAnswers.map(wa => `질문: "${wa.question}" / 정답: "${wa.correct}"`).join('\n');
         } else {
-            systemPrompt = "You are a helpful quiz tutor. Explain briefly why the correct answer is right for each question the user missed. Use English only.";
-            userPrompt = `
-            Please provide explanations for these missed questions.
-            
-            [Format]
-            Q: [Question Summary]
-            A: [Correct Answer] - [Brief Explanation]
-
-            [Missed Questions]
-            ` + wrongAnswers.map(wa => `Question: "${wa.question}" / Correct Answer: "${wa.correct}"`).join('\n');
+            systemPrompt = "Explain briefly why the correct answer is right. Use English.";
+            userPrompt = wrongAnswers.map(wa => `Question: "${wa.question}" / Correct Answer: "${wa.correct}"`).join('\n');
         }
 
-        const model = '@cf/meta/llama-3-8b-instruct';
-        let aiResponse;
-        if (aiAvailable) {
-            aiResponse = await env.AI.run(model, {
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.5
-            });
-        } else {
-            aiResponse = {
-                response: lang === 'ko' ? 
-                "AI 연결이 되지 않아 자동 생성된 해설입니다. 정답은 문맥을 통해 확인할 수 있습니다." : 
-                "This is a mock explanation because AI connection is unavailable."
-            };
-        }
-
-        let explanation = "";
-        if (aiResponse && aiResponse.response) {
-            explanation = aiResponse.response;
-        } else {
-            explanation = JSON.stringify(aiResponse);
-        }
+        let explanation = await runAI(systemPrompt, userPrompt);
+        if (!explanation) explanation = "Failed to generate explanation.";
 
         return new Response(JSON.stringify({ explanation }), {
             headers: { 'Content-Type': 'application/json; charset=utf-8' },
         });
 
     } catch (e) {
-        console.error(e);
-        return new Response(JSON.stringify({ error: e.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 }
