@@ -41,18 +41,20 @@ export async function onRequestPost(context) {
           messages: [
             { 
               role: "system", 
-              content: "You are a professional quiz generator. Output ONLY a valid JSON array. No markdown, no conversational text. Format: [{\"question\":\"...\",\"correct\":\"...\",\"wrong\":[\"...\",\"...\",\"...\"]}]" 
+              content: "You are a quiz JSON generator. Respond ONLY with a JSON array containing 10 objects. Do not include any markdown formatting, code blocks (like ```json), or introductory text. Just the raw [ ... ] array." 
             },
             { 
               role: "user", 
-              content: `Generate 10 high-quality multiple-choice quizzes about ${topic} in ${lang} language. Difficulty: ${difficulty}. Ensure exactly 3 wrong answers for each question.` 
+              content: `Generate 10 quizzes about ${topic} in ${lang} language. Difficulty: ${difficulty}. Format: [{"question":"...","correct":"...","wrong":["...","...","..."]}]` 
             }
           ],
-          temperature: 0.7
+          temperature: 0.6
         });
 
-        const text = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
+        let text = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
         if (text && text.trim()) {
+          // 제거: 마크다운 코드 블록 등 노이즈 제거
+          text = text.replace(/```json/g, "").replace(/```/g, "").trim();
           aiText = text;
           usedModel = model;
           log(`Success with model ${model}`);
@@ -68,16 +70,20 @@ export async function onRequestPost(context) {
     // 2. 파싱 로직 강화
     let quizData = [];
     try {
+      // 쉼표, 줄바꿈 등 제어 문자 정리
       const start = aiText.indexOf("[");
       const end = aiText.lastIndexOf("]");
       if (start !== -1 && end !== -1) {
-        const jsonStr = aiText.substring(start, end + 1).replace(/\n/g, " ");
+        let jsonStr = aiText.substring(start, end + 1);
+        // 비정상적인 제어 문자 제거 (JSON.parse 에러 방지)
+        jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
         quizData = JSON.parse(jsonStr);
       } else {
-        throw new Error("No JSON array found in AI output.");
+        log(`No brackets found. Raw snippet: ${aiText.substring(0, 100)}`);
+        throw new Error("No JSON array brackets found in output.");
       }
     } catch (e) {
-      log(`JSON Parse Error: ${e.message}. Raw: ${aiText.substring(0, 100)}...`);
+      log(`JSON Parse Error: ${e.message}. Raw prefix: ${aiText.substring(0, 200)}`);
       throw new Error(`AI output parsing failed: ${e.message}`);
     }
 

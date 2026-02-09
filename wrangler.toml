@@ -1,0 +1,8 @@
+name = "productbuilder-week1"
+pages_build_output_dir = "."
+
+[ai]
+binding = "AI"
+
+[vars]
+# 추가적인 환경 변수가 필요한 경우 여기에 작성 가능
