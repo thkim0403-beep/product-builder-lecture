@@ -1,3 +1,7 @@
+# Environment & Credentials
+.env
+deploy_config.md
+
 .dev.vars
 node_modules
 .DS_Store

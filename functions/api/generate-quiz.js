@@ -1,26 +1,69 @@
 // functions/api/generate-quiz.js
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const headers = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" };
+  const headers = { 
+    "Content-Type": "application/json; charset=utf-8", 
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Expose-Headers": "X-Debug-Log"
+  };
+
+  const debugLogs = [];
+  const log = (msg) => {
+    console.log(msg);
+    debugLogs.push(`[${new Date().toISOString()}] ${msg}`);
+  };
 
   try {
     const AI = env.AI;
-    if (!AI) throw new Error("AI 바인딩을 찾을 수 없습니다.");
+    if (!AI) throw new Error("AI binding not found in environment.");
 
     const body = await request.json().catch(() => ({}));
     const topic = body.topic || "일반 상식";
     const lang = body.lang || "ko";
+    const difficulty = body.difficulty || "Medium";
 
-    // 1. AI 호출 - 가장 안정적인 모델 사용
-    const response = await AI.run("@cf/meta/llama-3-8b-instruct", {
-      messages: [
-        { role: "system", content: "You are a quiz generator. Output ONLY a valid JSON array. No text before or after." },
-        { role: "user", content: `Generate 10 quizzes about ${topic} in ${lang}. Format: [{"question":"q","correct":"a","wrong":["w1","w2","w3"]}]` }
-      ]
-    });
+    log(`Starting Quiz Gen: topic=${topic}, lang=${lang}, difficulty=${difficulty}`);
 
-    const aiText = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
-    if (!aiText) throw new Error("AI 응답이 비어있습니다.");
+    const MODELS = [
+      "@cf/meta/llama-3.1-8b-instruct",
+      "@cf/meta/llama-3-8b-instruct",
+      "@cf/meta/llama-3.2-3b-instruct",
+      "@cf/mistral/mistral-7b-instruct-v0.1"
+    ];
+
+    let aiText = "";
+    let usedModel = "";
+
+    for (const model of MODELS) {
+      try {
+        log(`Trying model: ${model}`);
+        const response = await AI.run(model, {
+          messages: [
+            { 
+              role: "system", 
+              content: "You are a professional quiz generator. Output ONLY a valid JSON array. No markdown, no conversational text. Format: [{\"question\":\"...\",\"correct\":\"...\",\"wrong\":[\"...\",\"...\",\"...\"]}]" 
+            },
+            { 
+              role: "user", 
+              content: `Generate 10 high-quality multiple-choice quizzes about ${topic} in ${lang} language. Difficulty: ${difficulty}. Ensure exactly 3 wrong answers for each question.` 
+            }
+          ],
+          temperature: 0.7
+        });
+
+        const text = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
+        if (text && text.trim()) {
+          aiText = text;
+          usedModel = model;
+          log(`Success with model ${model}`);
+          break;
+        }
+      } catch (e) {
+        log(`Model ${model} failed: ${e.message}`);
+      }
+    }
+
+    if (!aiText) throw new Error("All AI models failed to provide a response.");
 
     // 2. 파싱 로직 강화
     let quizData = [];
@@ -30,31 +73,46 @@ export async function onRequestPost(context) {
       if (start !== -1 && end !== -1) {
         const jsonStr = aiText.substring(start, end + 1).replace(/\n/g, " ");
         quizData = JSON.parse(jsonStr);
+      } else {
+        throw new Error("No JSON array found in AI output.");
       }
     } catch (e) {
-      throw new Error(`JSON 파싱 실패: ${aiText.substring(0, 100)}`);
+      log(`JSON Parse Error: ${e.message}. Raw: ${aiText.substring(0, 100)}...`);
+      throw new Error(`AI output parsing failed: ${e.message}`);
     }
 
-    // 3. 데이터가 없을 경우 방어
     if (!Array.isArray(quizData) || quizData.length === 0) {
-      throw new Error("생성된 퀴즈가 배열 형식이 아닙니다.");
+      throw new Error("Generated data is not a valid array.");
     }
 
-    // 4. 최종 변환 (최대 10개)
-    const result = quizData.slice(0, 10).map(q => ({
-      question: q.question || "질문 없음",
-      correct: q.correct || "정답 없음",
-      answers: [q.correct, ...(q.wrong || [])].filter(Boolean).sort(() => Math.random() - 0.5)
-    }));
+    // 3. 최종 변환 및 유효성 검사
+    const result = quizData.slice(0, 10).map(q => {
+      if (!q.question || !q.correct) return null;
+      const wrong = Array.isArray(q.wrong) ? q.wrong : [];
+      return {
+        question: q.question,
+        correct: q.correct,
+        answers: [q.correct, ...wrong].filter(Boolean).sort(() => Math.random() - 0.5)
+      };
+    }).filter(Boolean);
 
-    return new Response(JSON.stringify(result), { status: 200, headers });
+    if (result.length === 0) throw new Error("No valid quiz items remained after filtering.");
+
+    const debugHeader = btoa(unescape(encodeURIComponent(JSON.stringify({ model: usedModel, logs: debugLogs }))));
+
+    return new Response(JSON.stringify(result), { 
+      status: 200, 
+      headers: { ...headers, "X-Debug-Log": debugHeader } 
+    });
 
   } catch (err) {
-    // 에러 발생 시 1개의 문제 객체에 에러 내용을 담아 반환 (Saved 1 items의 원인)
-    return new Response(JSON.stringify([{
-      question: `에러 발생: ${err.message}`,
-      correct: "확인",
-      answers: ["확인", "재시도", "설정체크", "대기"]
-    }]), { status: 200, headers });
+    log(`Fatal: ${err.message}`);
+    const debugHeader = btoa(unescape(encodeURIComponent(JSON.stringify({ logs: debugLogs }))));
+    
+    // 에러 발생 시 500 코드를 반환하여 클라이언트에서 재시도하게 함
+    return new Response(JSON.stringify({ error: err.message }), { 
+      status: 500, 
+      headers: { ...headers, "X-Debug-Log": debugHeader } 
+    });
   }
 }
