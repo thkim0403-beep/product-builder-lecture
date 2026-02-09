@@ -15,20 +15,19 @@ export async function onRequestPost(context) {
 
   try {
     const AI = env.AI;
-    if (!AI) throw new Error("AI binding not found in environment.");
+    if (!AI) throw new Error("AI binding not found.");
 
     const body = await request.json().catch(() => ({}));
     const topic = body.topic || "일반 상식";
     const lang = body.lang || "ko";
     const difficulty = body.difficulty || "Medium";
 
-    log(`Starting Quiz Gen: topic=${topic}, lang=${lang}, difficulty=${difficulty}`);
+    log(`Gen Start: ${topic} | ${lang} | ${difficulty}`);
 
     const MODELS = [
       "@cf/meta/llama-3.1-8b-instruct",
       "@cf/meta/llama-3-8b-instruct",
-      "@cf/meta/llama-3.2-3b-instruct",
-      "@cf/mistral/mistral-7b-instruct-v0.1"
+      "@cf/meta/llama-3.2-3b-instruct"
     ];
 
     let aiText = "";
@@ -36,77 +35,86 @@ export async function onRequestPost(context) {
 
     for (const model of MODELS) {
       try {
-        log(`Trying model: ${model}`);
+        log(`Trying ${model}`);
         const response = await AI.run(model, {
           messages: [
             { 
               role: "system", 
-              content: "You are a quiz JSON generator. Respond ONLY with a JSON array containing 10 objects. Do not include any markdown formatting, code blocks (like ```json), or introductory text. Just the raw [ ... ] array." 
+              content: "You are a quiz generator. Output ONLY a JSON array. Avoid using double quotes inside strings; use single quotes if needed. Example: {\"question\": \"Who wrote 'War and Peace'?\", ...}" 
             },
             { 
               role: "user", 
-              content: `Generate 10 quizzes about ${topic} in ${lang} language. Difficulty: ${difficulty}. Format: [{"question":"...","correct":"...","wrong":["...","...","..."]}]` 
+              content: `Create 5 ${difficulty} level quizzes about ${topic} in ${lang}. Format: [{"question":"...","correct":"...","wrong":["...","...","..."]}]` 
             }
           ],
-          temperature: 0.6
+          temperature: 0.5
         });
 
-        let text = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
+        const text = response.response || (response.result && response.result.response) || (typeof response === "string" ? response : "");
         if (text && text.trim()) {
-          // 제거: 마크다운 코드 블록 등 노이즈 제거
-          text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-          aiText = text;
+          aiText = text.replace(/```json/g, "").replace(/```/g, "").trim();
           usedModel = model;
-          log(`Success with model ${model}`);
+          log(`Model ${model} success`);
           break;
         }
-      } catch (e) {
-        log(`Model ${model} failed: ${e.message}`);
-      }
+      } catch (e) { log(`Model ${model} failed: ${e.message}`); }
     }
 
-    if (!aiText) throw new Error("All AI models failed to provide a response.");
+    if (!aiText) throw new Error("AI failed to respond.");
 
-    // 2. 파싱 로직 강화
+    // --- High Resilience JSON Parsing ---
     let quizData = [];
+    
+    // Attempt 1: Standard Parse
     try {
-      // 쉼표, 줄바꿈 등 제어 문자 정리
       const start = aiText.indexOf("[");
       const end = aiText.lastIndexOf("]");
       if (start !== -1 && end !== -1) {
-        let jsonStr = aiText.substring(start, end + 1);
-        // 비정상적인 제어 문자 제거 (JSON.parse 에러 방지)
-        jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-        quizData = JSON.parse(jsonStr);
-      } else {
-        log(`No brackets found. Raw snippet: ${aiText.substring(0, 100)}`);
-        throw new Error("No JSON array brackets found in output.");
+        let clean = aiText.substring(start, end + 1)
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+          .replace(/,\s*([\]}])/g, "$1");
+        quizData = JSON.parse(clean);
       }
     } catch (e) {
-      log(`JSON Parse Error: ${e.message}. Raw prefix: ${aiText.substring(0, 200)}`);
-      throw new Error(`AI output parsing failed: ${e.message}`);
+      log("Standard parse failed. Trying Regex extraction...");
+      
+      // Attempt 2: Extract individual objects {...}
+      const objectMatches = aiText.match(/\{[^{}]*?"question"[^{}]*?\}/gs);
+      if (objectMatches) {
+        for (const objStr of objectMatches) {
+          try {
+            // Basic cleanup for each object
+            let cleanObj = objStr.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").replace(/,\s*\}/g, "}");
+            quizData.push(JSON.parse(cleanObj));
+          } catch (objErr) { /* Skip broken objects */ }
+        }
+      }
     }
 
     if (!Array.isArray(quizData) || quizData.length === 0) {
-      throw new Error("Generated data is not a valid array.");
+      log(`Full Text: ${aiText.substring(0, 500)}`);
+      throw new Error("Failed to extract any valid quiz objects.");
     }
 
-    // 3. 최종 변환 및 유효성 검사
-    const result = quizData.slice(0, 10).map(q => {
+    // --- Validation & Formatting ---
+    const finalResult = quizData.map(q => {
       if (!q.question || !q.correct) return null;
-      const wrong = Array.isArray(q.wrong) ? q.wrong : [];
+      const correct = String(q.correct);
+      const wrong = Array.isArray(q.wrong) ? q.wrong.map(String) : [];
+      const uniqueWrong = [...new Set(wrong)].filter(w => w !== correct).slice(0, 3);
+      while (uniqueWrong.length < 3) uniqueWrong.push(`Option ${uniqueWrong.length + 1}`);
+      
       return {
-        question: q.question,
-        correct: q.correct,
-        answers: [q.correct, ...wrong].filter(Boolean).sort(() => Math.random() - 0.5)
+        question: String(q.question),
+        correct: correct,
+        answers: [correct, ...uniqueWrong].sort(() => Math.random() - 0.5)
       };
-    }).filter(Boolean);
+    }).filter(Boolean).slice(0, 10);
 
-    if (result.length === 0) throw new Error("No valid quiz items remained after filtering.");
+    if (finalResult.length === 0) throw new Error("No valid quizzes after validation.");
 
     const debugHeader = btoa(unescape(encodeURIComponent(JSON.stringify({ model: usedModel, logs: debugLogs }))));
-
-    return new Response(JSON.stringify(result), { 
+    return new Response(JSON.stringify(finalResult), { 
       status: 200, 
       headers: { ...headers, "X-Debug-Log": debugHeader } 
     });
@@ -114,8 +122,6 @@ export async function onRequestPost(context) {
   } catch (err) {
     log(`Fatal: ${err.message}`);
     const debugHeader = btoa(unescape(encodeURIComponent(JSON.stringify({ logs: debugLogs }))));
-    
-    // 에러 발생 시 500 코드를 반환하여 클라이언트에서 재시도하게 함
     return new Response(JSON.stringify({ error: err.message }), { 
       status: 500, 
       headers: { ...headers, "X-Debug-Log": debugHeader } 
